@@ -1,0 +1,920 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TV">
+<meta name="theme-color" content="#14161B">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" id="manifest" href="/manifest.webmanifest">
+<title>TV</title>
+<style>
+  :root {
+    --night: #14161B; --key: #1F232A; --pressed: #2A2F38; --edge: #2C313A;
+    --ink: #E6E8EC; --muted: #8A919C; --signal: #8AB4F8; --on: #7FD3A8; --warn: #F2A68B;
+    --r-key: 14px; --gap: 10px;
+    font-family: ui-rounded, -apple-system, "SF Pro Rounded", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { position: fixed; inset: 0; margin: 0; overflow: hidden; overscroll-behavior: none; background: var(--night); color: var(--ink); }
+  body {
+    display: grid; gap: var(--gap);
+    padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
+  }
+  /* Tall screens: iPhone 18 Pro, and the Duo folded (no apps). */
+  body[data-layout="tall"] { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "top" "pad" "nav" "keys" "type" "apps"; }
+  body[data-layout="tall"][data-apps="off"] { grid-template-rows: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "top" "pad" "nav" "keys" "type"; }
+  /* Wide or square screens: the Duo unfolded (and a phone turned sideways). */
+  body[data-layout="wide"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; grid-template-areas: "top top" "pad apps" "nav apps" "keys type"; column-gap: 22px; }
+  body[data-layout="wide"][data-apps="off"] { grid-template-areas: "top top" "pad pad" "nav type" "keys keys"; }
+  body[data-apps="off"] #apps { display: none; }
+  /* Away from home (the HTTPS copy, through the relay): the TV's state, power and the alarm; the remote's keys are the Home app's job there. */
+  body[data-away][data-layout] { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "top" "away"; }
+  body[data-away] #padwrap, body[data-away] #nav, body[data-away] #keys, body[data-away] #type, body[data-away] #apps, body[data-away] #vpn { display: none; }
+  #awayPanel { grid-area: away; display: grid; align-content: center; justify-items: center; gap: 14px; text-align: center; }
+  #awayPanel[hidden] { display: none; }
+  #awayNext { margin: 0; font-size: clamp(40px, 12vw, 64px); font-weight: 600; letter-spacing: -0.02em; }
+  #awayWhen { margin: 0; font-size: 15px; color: var(--muted); }
+  #awayAlarm { height: 52px; padding: 0 26px; font-size: 16px; font-weight: 600; color: var(--night); background: var(--signal); }
+  #awayNote { margin: 8px 0 0; max-width: 300px; font-size: 13px; line-height: 1.4; color: var(--muted); }
+
+  button { font: inherit; color: inherit; border: 0; background: var(--key); border-radius: var(--r-key); touch-action: manipulation; }
+  button:active, button.down { background: var(--pressed); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Top bar: power, TV name and what it is doing, VPN. */
+  #top { grid-area: top; display: grid; grid-template-columns: 44px 1fr auto auto; align-items: center; gap: 10px; min-height: 48px; }
+  #alarmBtn { height: 34px; padding: 0 12px; border-radius: 17px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--muted); }
+  #alarmBtn svg { width: 16px; height: 16px; }
+  #alarmBtn.set { color: var(--ink); }
+  #power { width: 44px; height: 44px; border-radius: 50%; color: var(--muted); }
+  #power.on { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--edge); }
+  #who { min-width: 0; line-height: 1.2; }
+  #name { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  #state { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #vpn { height: 34px; padding: 0 14px; border-radius: 17px; font-size: 14px; font-weight: 600; color: var(--muted); }
+  #vpn.on { color: var(--night); background: var(--on); }
+  /* The pills look 34 points tall; their touch area is 44, as iOS expects (checked at every Duo and Pro size, 2026-11-09). */
+  #alarmBtn, #vpn { position: relative; }
+  #alarmBtn::after, #vpn::after { content: ""; position: absolute; inset: -5px -4px; }
+
+  /* The clickpad: the one bold element. Tap an edge or the centre, or swipe anywhere on it. */
+  #padwrap { grid-area: pad; container-type: size; display: grid; place-items: center; min-height: 0; }
+  #pad {
+    position: relative; width: min(100cqw, 100cqh, 360px); aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(circle at 50% 38%, #262A32 0%, #1D2027 62%, #191C22 100%);
+    box-shadow: inset 0 0 0 1.5px var(--edge), inset 0 -14px 30px rgba(0,0,0,.35);
+    touch-action: none; overflow: hidden;
+  }
+  /* The Duo's inner screen is half again an 18 Pro Max: let the pad use it. */
+  body[data-kind="duo-open"] #pad { width: min(100cqw, 100cqh, 460px); }
+  #ok {
+    position: absolute; inset: 31%; border-radius: 50%; display: grid; place-items: center;
+    background: #2A2E37; box-shadow: inset 0 0 0 1.5px #343A45; font-weight: 600; font-size: 15px; letter-spacing: .02em; color: var(--muted); pointer-events: none;
+    transition: background .12s;
+  }
+  #ok.hit { background: #343944; color: var(--ink); }
+  .chev { position: absolute; width: 26px; height: 26px; color: #59606B; pointer-events: none; transition: color .12s; }
+  .chev.hit { color: var(--signal); }
+  .chev.u { top: 7%; left: calc(50% - 13px); } .chev.d { bottom: 7%; left: calc(50% - 13px); transform: rotate(180deg); }
+  .chev.l { left: 7%; top: calc(50% - 13px); transform: rotate(-90deg); } .chev.r { right: 7%; top: calc(50% - 13px); transform: rotate(90deg); }
+  .ripple { position: absolute; width: 90px; height: 90px; margin: -45px 0 0 -45px; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, rgba(138,180,248,.28), rgba(138,180,248,0) 70%); animation: ripple .45s ease-out forwards; }
+  @keyframes ripple { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+
+  #nav { grid-area: nav; display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+  #nav button { height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 600; }
+
+  #keys { grid-area: keys; display: grid; grid-template-columns: repeat(3, 1fr) 14px repeat(3, 1fr); gap: 8px; }
+  #keys button { height: 50px; display: grid; place-items: center; }
+  #keys .play { color: var(--ink); background: #262A32; }
+  #keys .vol { color: var(--muted); }
+
+  #type { grid-area: type; display: grid; grid-template-columns: 1fr 48px; gap: 8px; align-self: end; }
+  #type input { min-width: 0; height: 48px; padding: 0 14px; font: inherit; font-size: 16px; color: var(--ink); background: var(--key); border: 0; border-radius: var(--r-key); -webkit-user-select: text; user-select: text; }
+  #type input::placeholder { color: #6B727D; }
+  #type button { height: 48px; display: grid; place-items: center; color: var(--signal); }
+  /* A text box is open on the TV: the phone's box lights up, like an Apple TV asking the iPhone for text. */
+  #type.asking input { box-shadow: inset 0 0 0 2px var(--signal); animation: ask 1.6s ease-in-out 2; }
+  #type.asking input::placeholder { color: var(--signal); }
+  @keyframes ask { 50% { box-shadow: inset 0 0 0 2px var(--signal), 0 0 0 6px rgba(138,180,248,.25); } }
+
+  #apps { grid-area: apps; display: grid; gap: 8px; align-content: start; min-height: 0; }
+  body[data-layout="tall"] #apps { grid-template-columns: repeat(5, 1fr); }
+  body[data-layout="wide"] #apps { grid-template-columns: repeat(3, 1fr); align-content: center; gap: 12px; }
+  .app { aspect-ratio: 16 / 9; border-radius: 9px; overflow: hidden; padding: 0; display: grid; place-items: center; background: var(--key) center / cover no-repeat; }
+  body[data-layout="wide"] .app { border-radius: 12px; }
+  .app:active { filter: brightness(1.25); }
+  .app .glyph { display: grid; place-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  body[data-layout="wide"] .app .glyph { font-size: 14px; }
+  .app .glyph svg { width: 18px; height: 18px; }
+
+  #toast { position: fixed; z-index: 7; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 76px); transform: translateX(-50%); max-width: 86vw;
+    padding: 10px 16px; border-radius: 12px; background: #2A2F38; color: var(--ink); font-size: 14px; text-align: center;
+    opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #toast.show { opacity: 1; }
+  #toast.bad { color: var(--warn); }
+  #haptic { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+  /* Pairing: covers the remote until this phone has the TV's key. */
+  #pair { position: fixed; inset: 0; z-index: 5; display: grid; place-content: center; gap: 14px; padding: 24px; background: var(--night); text-align: center; }
+  #pair[hidden] { display: none; }
+  #pair h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+  #pair p { margin: 0 auto; max-width: 300px; font-size: 15px; line-height: 1.4; color: var(--muted); }
+  #pair button { height: 52px; padding: 0 22px; font-size: 16px; font-weight: 600; }
+  #pair #pairShow { color: var(--night); background: var(--signal); }
+  /* Alarm settings: a sheet over the remote. */
+  .sheet { position: fixed; inset: 0; z-index: 4; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 12px; background: var(--night);
+    padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .sheet[hidden] { display: none; }
+  .sheet header { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+  .sheet h2 { margin: 0; font-size: 22px; font-weight: 600; }
+  .sheet header button { height: 38px; padding: 0 16px; font-size: 15px; font-weight: 600; color: var(--signal); }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--key); border-radius: 12px; }
+  .tabs button { height: 34px; font-size: 14px; font-weight: 600; color: var(--muted); background: transparent; border-radius: 9px; }
+  .tabs button.on { color: var(--ink); background: var(--pressed); }
+  .list { overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; align-content: start; gap: 6px; }
+  .row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; min-height: 50px; padding: 0 12px; background: var(--key); border-radius: var(--r-key); }
+  .row .what { line-height: 1.2; }
+  .row .what b { display: block; font-size: 16px; font-weight: 600; }
+  .row .what small { font-size: 12px; color: var(--muted); }
+  .row .what small.changed { color: var(--signal); }
+  .row.off .when { opacity: .35; }
+  .when { display: flex; align-items: center; gap: 2px; }
+  .when select { height: 36px; padding: 0 6px; font: inherit; font-size: 17px; font-weight: 600; color: var(--ink); background: var(--pressed); border: 0; border-radius: 9px; -webkit-appearance: none; appearance: none; text-align: center; }
+  .row .usual { height: 30px; padding: 0 10px; font-size: 12px; color: var(--signal); background: transparent; }
+  .row input[type=checkbox] { width: 44px; height: 26px; accent-color: var(--on); }
+
+  /* The alarm hour: the remote becomes one button and the puzzle. */
+  #wake { position: fixed; inset: 0; z-index: 6; display: grid; grid-template-rows: 1fr auto; padding: max(24px, env(safe-area-inset-top)) 22px max(24px, env(safe-area-inset-bottom));
+    background: linear-gradient(170deg, #1A1630 0%, #3A2340 45%, #A8553A 100%); color: #FFF3E6; text-align: center; }
+  #wake[hidden] { display: none; }
+  #wake .face { display: grid; place-content: center; gap: 6px; }
+  #wakeClock { font-size: 88px; font-weight: 300; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  #wakeBy { font-size: 18px; opacity: .8; }
+  #wakeState { font-size: 15px; opacity: .7; min-height: 20px; }
+  .wakeButtons { display: grid; gap: 12px; }
+  /* Stopping one ring is the easy, big button; the puzzle that ends the alarm is the quieter one under it. */
+  #ringStop { width: 100%; height: 72px; border-radius: 36px; font-size: 20px; font-weight: 700; color: #2A140C; background: #FFC48A; }
+  #ringStop:disabled { color: #FFF3E6; background: rgba(255,243,230,.14); }
+  #wakeOff { width: 100%; height: 52px; border-radius: 26px; font-size: 16px; font-weight: 600; color: #FFF3E6; background: transparent; box-shadow: inset 0 0 0 1.5px rgba(255,243,230,.45); }
+  #puzzle { display: grid; gap: 12px; }
+  #puzzle[hidden], .wakeButtons[hidden] { display: none; }
+  #question { font-size: 44px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #answer { height: 56px; display: grid; place-items: center; font-size: 34px; font-weight: 600; border-radius: 16px; background: rgba(255,243,230,.12); font-variant-numeric: tabular-nums; }
+  #answer.wrong { animation: shake .35s; color: #FFB4A0; }
+  @keyframes shake { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+  #dots { display: flex; justify-content: center; gap: 10px; }
+  #dots i { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,243,230,.25); }
+  #dots i.on { background: #FFC48A; }
+  #numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #numpad button { height: 56px; font-size: 24px; font-weight: 600; color: #FFF3E6; background: rgba(255,243,230,.12); border-radius: 14px; }
+  #numpad button:active { background: rgba(255,243,230,.28); }
+  #numpad .go { color: #2A140C; background: #FFC48A; }
+
+  .row.mission { grid-template-columns: 1fr; gap: 8px; padding: 12px; }
+  .row.mission .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .row.mission .acts button { height: 36px; padding: 0 14px; font-size: 14px; font-weight: 600; color: var(--ink); background: var(--pressed); }
+  /* Turning the alarm off by photo. iOS shows its own "Retake / Use Photo" screen after the shot, and a web page gets nothing until Use Photo, so the steps say so; then the panel shows checking, the answer, or that no photo came back. */
+  #scan { display: grid; gap: 14px; text-align: left; }
+  #scan[hidden], #scan [hidden] { display: none; }
+  #scanTitle { font-size: 24px; font-weight: 700; line-height: 1.2; }
+  #scanHint { font-size: 16px; line-height: 1.4; color: rgba(255,243,230,.85); }
+  #scanSteps { margin: 0; padding: 0 0 0 1.3em; display: grid; gap: 6px; font-size: 17px; line-height: 1.35; }
+  #scanSteps b { color: #FFC48A; }
+  #scan[data-state="busy"] #scanTitle::after { content: ""; display: inline-block; width: 18px; height: 18px; margin-left: 12px; vertical-align: -2px; border: 2.5px solid rgba(255,243,230,.3); border-top-color: #FFC48A; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #scan[data-state="failed"] #scanTitle { color: #FFB4A0; }
+  #scanGo { width: 100%; height: 72px; border-radius: 36px; font-size: 20px; font-weight: 700; color: #2A140C; background: #FFC48A; }
+  #scanBack { height: 44px; color: #FFF3E6; background: transparent; }
+  /* The alarm is off: the sunrise finishes. Stays for a few seconds so it is unmistakable, then the remote comes back. */
+  #wake.done { background: linear-gradient(170deg, #FFE4BF 0%, #FFC48A 100%); color: #2A140C; }
+  #wake.done .actions, #wake.done #wakeBy, #wake.done #wakeState { display: none; }
+  #wakeDone { display: none; font-size: 22px; font-weight: 600; }
+  #wake.done #wakeDone { display: block; }
+  #wake.done .face { grid-column: 1 / -1; }
+  /* Controls keep a hand-sized width on big screens instead of stretching across them. */
+  #wake .actions { width: 100%; max-width: 440px; justify-self: center; }
+  #wakeClock { font-size: clamp(72px, min(22vw, 16vh), 150px); }
+  /* Wide windows (the Duo unfolded, or folded and turned): the clock on one half, the controls on the other, split where the Duo folds. */
+  body[data-layout="wide"] #wake { grid-template-rows: 1fr; grid-template-columns: 1fr 1fr; align-items: center; column-gap: 32px; padding-left: max(28px, env(safe-area-inset-left)); padding-right: max(28px, env(safe-area-inset-right)); }
+  body[data-layout="wide"] #wakeClock { font-size: clamp(72px, min(13vw, 24vh), 150px); }
+  body[data-layout="wide"] #wake .actions { max-height: 100%; overflow-y: auto; }
+  body[data-layout="wide"] #numpad button { height: clamp(40px, 9vh, 56px); }
+  body[data-layout="wide"] #question { font-size: clamp(32px, 7vh, 44px); }
+
+  #qrSheet { z-index: 6; grid-template-rows: auto minmax(0, 1fr) auto; }
+  #qrSheet .qr { position: relative; min-height: 0; background: #fff; border-radius: 12px; }
+  #qrSheet img { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); object-fit: contain; -webkit-touch-callout: default; }
+  #qrSheet p { margin: 0; font-size: 15px; line-height: 1.4; color: var(--muted); text-align: center; }
+
+  #pair input { width: 200px; height: 60px; justify-self: center; text-align: center; font: inherit; font-size: 30px; font-weight: 600; letter-spacing: .3em; color: var(--ink); background: var(--key); border: 0; border-radius: var(--r-key); -webkit-user-select: text; user-select: text; }
+  @media (prefers-reduced-motion: reduce) { .ripple { animation: none; opacity: 0; } }
+</style>
+</head>
+<body data-layout="tall" data-apps="on">
+<header id="top">
+  <button id="power" aria-label="Power"><svg viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg></button>
+  <div id="who"><div id="name">TV</div><div id="state">Connecting</div></div>
+  <button id="alarmBtn" aria-label="Alarm"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 2"/><path d="M5 4L2 7"/><path d="M19 4l3 3"/></svg><span id="alarmNext">Alarm</span></button>
+  <button id="vpn" aria-label="VPN">VPN</button>
+</header>
+
+<div id="padwrap">
+  <div id="pad" role="group" aria-label="Arrows and OK">
+    <svg class="chev u" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+    <svg class="chev d" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+    <svg class="chev l" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+    <svg class="chev r" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+    <div id="ok">OK</div>
+  </div>
+</div>
+
+<nav id="nav">
+  <button data-k="back"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Back</button>
+  <button data-k="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Home</button>
+</nav>
+
+<div id="keys">
+  <button data-k="rewind" aria-label="Rewind"><svg viewBox="0 0 24 24"><path d="M11 6l-7 6 7 6z"/><path d="M20 6l-7 6 7 6z"/></svg></button>
+  <button data-k="play_pause" class="play" aria-label="Play or pause"><svg viewBox="0 0 24 24"><path d="M5 5l8 7-8 7z"/><path d="M16 6v12"/><path d="M20 6v12"/></svg></button>
+  <button data-k="fast_forward" aria-label="Fast forward"><svg viewBox="0 0 24 24"><path d="M13 6l7 6-7 6z"/><path d="M4 6l7 6-7 6z"/></svg></button>
+  <span></span>
+  <button data-k="volume_down" class="vol" aria-label="Volume down"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+  <button data-k="mute" class="vol" aria-label="Mute"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6"/><path d="M21 9l-4 6"/></svg></button>
+  <button data-k="volume_up" class="vol" aria-label="Volume up"><svg viewBox="0 0 24 24"><path d="M6 12h12"/><path d="M12 6v12"/></svg></button>
+</div>
+
+<form id="type" autocomplete="off">
+  <input id="t" placeholder="Type on the TV" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+  <button type="submit" aria-label="Send to TV"><svg viewBox="0 0 24 24"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></button>
+</form>
+
+<section id="apps" aria-label="Apps"></section>
+<section id="awayPanel" hidden aria-label="Alarm from anywhere">
+  <p id="awayNext">&nbsp;</p>
+  <p id="awayWhen">Asking the TV</p>
+  <button id="awayAlarm">Change the alarm</button>
+  <p id="awayNote">You're using the TV from away. Open the Home app for the arrows and apps.</p>
+</section>
+<section id="alarmSheet" class="sheet" hidden aria-label="Alarm">
+  <header><h2>Wake up by</h2><button id="alarmDone">Done</button></header>
+  <div class="tabs"><button id="tabWeek" class="on">Every week</button><button id="tabDays">Dates</button></div>
+  <div id="alarmList" class="list"></div>
+</section>
+
+<section id="wake" hidden aria-label="Alarm">
+  <div class="face"><div id="wakeClock">7:00</div><div id="wakeBy">Up by 7:20</div><div id="wakeState"></div><div id="wakeDone">Alarm off. Good morning</div></div>
+  <div class="actions">
+    <div class="wakeButtons" id="wakeButtons">
+      <button id="ringStop">Stop this ring</button>
+      <button id="wakeOff">Turn alarm off</button>
+    </div>
+    <div id="scan" hidden data-state="ready">
+      <div id="scanTitle">Scan your QR code</div>
+      <ol id="scanSteps"><li>Open the camera and take a photo of the QR code.</li><li>Tap <b>Use Photo</b> to send it.</li></ol>
+      <div id="scanHint" hidden></div>
+      <button id="scanGo">Open camera</button>
+      <button id="scanBack">Back</button>
+    </div>
+    <div id="puzzle" hidden>
+      <div id="dots"></div>
+      <div id="question">?</div>
+      <div id="answer">&nbsp;</div>
+      <div id="numpad"></div>
+    </div>
+  </div>
+</section>
+
+<section id="qrSheet" class="sheet" hidden aria-label="QR code">
+  <header><h2>Your QR code</h2><button id="qrDone">Done</button></header>
+  <div class="qr"><img id="qrImg" alt="The QR code that turns the alarm off"></div>
+  <p>Touch and hold the code to save or print it. Scanning a screen showing it works too.</p>
+</section>
+<input type="file" id="camera" accept="image/*" capture="environment" hidden>
+<div id="pair" hidden>
+  <h1>Pair with the TV</h1>
+  <p id="pairHint">This remote needs the TV's key. The TV will show a 4-digit code.</p>
+  <button id="pairShow">Show code on TV</button>
+  <input id="pairCode" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" placeholder="0000" hidden>
+</div>
+<div id="toast" role="status"></div>
+<label id="haptic"><input type="checkbox" switch id="hapticbox"></label>
+
+<script>
+const $ = s => document.querySelector(s);
+const params = new URLSearchParams(location.search);
+// Away from home: the same page from its HTTPS copy (Relay.PAGE_URL on the TV) reaches the TV through the relay instead of the LAN.
+const AWAY = location.protocol === "https:";
+let token = params.get("t") || (AWAY ? new URLSearchParams(location.hash.slice(1)).get("k") || "" : "");
+try { if (token) localStorage.setItem("tvtoken", token); else token = localStorage.getItem("tvtoken") || ""; } catch (e) {}
+// A home-screen app keeps its own storage and starts from what Add to Home Screen saved: the address and the manifest the TV served. Both carry the token only if the address does, so reload once with it when Safari opened the bare address. The away copy keeps it after the # instead, which never leaves the phone.
+if (!AWAY && token && !params.get("t")) location.replace(location.pathname + "?t=" + encodeURIComponent(token));
+if (AWAY && token && !location.hash.includes("k=")) history.replaceState(null, "", location.pathname + "#k=" + encodeURIComponent(token));
+if (AWAY) { $("#manifest").remove(); document.body.dataset.away = ""; $("#awayPanel").hidden = false; }
+else if (token) $("#manifest").href = "/manifest.webmanifest?t=" + encodeURIComponent(token);
+
+let toastTimer;
+function toast(text, bad) {
+  const el = $("#toast"); el.textContent = text; el.className = "show" + (bad ? " bad" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.className = "", 2200);
+}
+// iOS 18 Safari gives a haptic tick when a switch toggles; there is no vibration API on iPhone.
+function tick() { try { $("#haptic").click(); } catch (e) {} if (navigator.vibrate) navigator.vibrate(8); }
+
+async function api(path, body) {
+  if (AWAY) return relay(body ? "POST" : "GET", path, body);
+  const r = await fetch(path, { method: body ? "POST" : "GET", headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401) { showPairing(); throw new Error("unauthorized"); }
+  return r.json();
+}
+
+/*
+ * The relay (Relay.kt on the TV): requests go to ntfy.sh, a public message relay, sealed with AES-GCM; the TV, which keeps a connection to its topic, posts each answer to a second topic that this page listens to. The key and both topics come from the pairing token, so the relay sees only ciphertext.
+ */
+const RELAY = "https://ntfy.sh", enc = new TextEncoder();
+let relayKeys = null, relaySource = null;
+const relayWaiting = new Map();
+async function relayHkdf(ikm, info, bits) {
+  const k = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt: enc.encode("bedroom-tv-relay"), info: enc.encode(info) }, k, bits));
+}
+const hexOf = b => [...b].map(x => x.toString(16).padStart(2, "0")).join("");
+async function keysFor() {
+  if (relayKeys) return relayKeys;
+  const ikm = enc.encode(token);
+  relayKeys = {
+    key: await crypto.subtle.importKey("raw", await relayHkdf(ikm, "key", 256), "AES-GCM", false, ["encrypt", "decrypt"]),
+    toTv: "btv-" + hexOf(await relayHkdf(ikm, "to-tv", 128)), fromTv: "btv-" + hexOf(await relayHkdf(ikm, "from-tv", 128)),
+  };
+  return relayKeys;
+}
+const b64u = b => btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+const squeeze = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+async function seal(obj, topic) {
+  const k = await keysFor(), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: enc.encode(topic) }, k.key, await squeeze(enc.encode(JSON.stringify(obj)), new CompressionStream("deflate-raw"))));
+  const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+  return b64u(out);
+}
+async function unseal(text, topic) {
+  const k = await keysFor(), raw = unb64u(text.trim());
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: raw.slice(0, 12), additionalData: enc.encode(topic) }, k.key, raw.slice(12));
+  return JSON.parse(new TextDecoder().decode(await squeeze(new Uint8Array(plain), new DecompressionStream("deflate-raw"))));
+}
+// Listening for answers from half a minute back, so one posted before this connection opened still arrives.
+async function listenRelay() {
+  if (relaySource && relaySource.readyState !== EventSource.CLOSED) return;
+  const k = await keysFor();
+  relaySource = new EventSource(`${RELAY}/${k.fromTv}/sse?since=${Math.floor(Date.now() / 1000) - 30}`);
+  relaySource.onmessage = async e => {
+    try {
+      const m = JSON.parse(e.data);
+      if (m.event && m.event !== "message") return;
+      const a = await unseal(m.message, k.fromTv), done = relayWaiting.get(a.id);
+      if (done) { relayWaiting.delete(a.id); done(a); }
+    } catch (err) {}
+  };
+}
+async function relay(method, path, body) {
+  if (!token) { showPairing(); throw new Error("unauthorized"); }
+  const k = await keysFor(); await listenRelay();
+  const id = b64u(crypto.getRandomValues(new Uint8Array(9)));
+  const answer = new Promise((ok, fail) => { relayWaiting.set(id, ok); setTimeout(() => { if (relayWaiting.delete(id)) fail(new Error("The TV isn't answering")); }, 15000); });
+  const r = await fetch(`${RELAY}/${k.toTv}`, { method: "POST", body: await seal({ id, t: Date.now(), m: method, p: path, b: body || null }, k.toTv) });
+  if (!r.ok) { relayWaiting.delete(id); throw new Error(r.status === 429 ? "The relay is busy. Try again in a minute." : "Can't reach the relay"); }
+  const a = await answer;
+  if (a.s === 401) { showPairing(); throw new Error("unauthorized"); }
+  return a.b;
+}
+
+/* Photos for the alarm's scan mission: shrunk to 1000 pixels on the phone (a camera photo is several megabytes; the TV reads a code only 120 pixels wide in that), then sent as a JPEG of about 150 KB. Uploads to the TV stall for 10 to 20 seconds one time in three to ten: the TV's Wi-Fi loses its TCP acknowledgements for a while (its counters show the data arriving twice; the VPN is not involved), and only a fresh connection gets round it. A send normally takes under a second (upload plus the TV reading the code), so one that takes over 4 seconds is dropped and sent again. Sending twice is harmless: the second answer to a finished alarm is "done". */
+let cameraFor = null, qrUrl = null;
+async function showQr() {
+  try {
+    const r = await fetch("/api/alarm/mission/qr.png", { headers: { "Authorization": "Bearer " + token } });
+    if (!r.ok) { toast("This code isn't one the TV made. Make a QR code to get one.", true); return; }
+    if (qrUrl) URL.revokeObjectURL(qrUrl);
+    qrUrl = URL.createObjectURL(await r.blob()); $("#qrImg").src = qrUrl; $("#qrSheet").hidden = false;
+  } catch (e) { toast("Can't reach the TV", true); }
+}
+$("#qrDone").addEventListener("click", () => { tick(); $("#qrSheet").hidden = true; });
+function takePhoto(purpose) { cameraFor = purpose; $("#camera").value = ""; $("#camera").click(); }
+/* The scan panel: ready (the steps), busy (sending and checking), failed (the TV's reason), none (the camera closed without a photo). */
+function scanState(state, title, hint) {
+  const el = $("#scan"); el.dataset.state = state;
+  $("#scanTitle").textContent = title;
+  $("#scanSteps").hidden = !(state === "ready" || state === "none");
+  $("#scanHint").hidden = !hint; $("#scanHint").textContent = hint || "";
+  $("#scanGo").hidden = $("#scanBack").hidden = state === "busy";
+  $("#scanGo").textContent = state === "failed" ? "Try again" : "Open camera";
+}
+// Safari tells the page when the camera closes without a photo (Cancel, or Retake then Cancel).
+$("#camera").addEventListener("cancel", () => {
+  if (cameraFor === "alarm") scanState("none", "No photo came through", "After taking the photo, tap Use Photo.");
+  else toast("No photo came through. After taking it, tap Use Photo.", true);
+});
+let wakeDoneUntil = 0;
+function alarmOff() {
+  wakeDoneUntil = Date.now() + 3500;
+  $("#wake").classList.add("done"); $("#wake").hidden = false;
+  if (navigator.vibrate) navigator.vibrate(200);
+  // Then the remote: hidden outright (the last status may still say the alarm is on), and the next status confirms it.
+  setTimeout(() => { $("#wake").classList.remove("done"); wakeDoneUntil = 0; wakeMode(null); refresh(); }, 3500);
+}
+async function sendPhoto(path, file) {
+  const url = URL.createObjectURL(file), img = new Image();
+  img.src = url; await img.decode();
+  const scale = Math.min(1, 1000 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+  // A 4x shrink with the default filter aliases like dropping pixels; the high-quality one keeps a small code readable (down to about 85 pixels wide in tests).
+  const g = c.getContext("2d"); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  g.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+  let blob;
+  for (const q of [0.7, 0.5, 0.35]) { blob = await new Promise(r => c.toBlob(r, "image/jpeg", q)); if (blob.size < 400000) break; }
+  for (let attempt = 1; ; attempt++) {
+    const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 4000);
+    try {
+      const r = await fetch(path, { method: "POST", headers: { "Authorization": "Bearer " + token, "Content-Type": "image/jpeg" }, body: blob, signal: stop.signal });
+      if (r.status === 401) { showPairing(); throw new Error("unauthorized"); }
+      return await r.json();
+    } catch (err) {
+      if (err.message === "unauthorized" || attempt === 4) throw err;
+      if (cameraFor === "alarm") scanState("busy", "Still sending the photo", "The Wi-Fi is slow. Trying again."); else toast("Still sending the photo");
+    } finally { clearTimeout(timer); }
+  }
+}
+$("#camera").addEventListener("change", async e => {
+  const file = e.target.files && e.target.files[0]; if (!file) return;
+  if (cameraFor === "alarm") {
+    scanState("busy", "Checking the photo");
+    try {
+      const r = await sendPhoto("/api/alarm/mission/scan", file);
+      if (r.done) alarmOff(); else scanState("failed", "That didn't work", r.error || "Try again.");
+    } catch (err) { scanState("failed", "Couldn't reach the TV", "Check the phone is on the home Wi-Fi, then try again."); }
+    return;
+  }
+  toast("Checking the photo");
+  try {
+    if (cameraFor === "test") {
+      const r = await sendPhoto("/api/alarm/mission/test", file);
+      toast(r.match ? "That's your code. It will turn the alarm off." : r.error || "Try again", !r.match);
+    }
+  } catch (err) { toast("Can't reach the TV", true); }
+});
+
+/* Pairing by code: the TV shows 4 digits, this phone sends them back and gets the key. It works inside a home-screen app, whose storage is its own. */
+function showPairing() {
+  $("#pair").hidden = false;
+  if (AWAY) { $("#pair h1").textContent = "Set up at home"; $("#pairHint").textContent = "Open the TV remote on the home Wi-Fi, tap the alarm, then Set up under From anywhere."; $("#pairShow").hidden = true; }
+}
+$("#pairShow").addEventListener("click", async () => {
+  tick();
+  try {
+    const r = await (await fetch("/api/pair/start", { method: "POST" })).json();
+    // A code already on the TV (a second tap) can still be typed in, so show the box for it too.
+    const already = !r.ok && /already/.test(r.error || "");
+    if (!r.ok && !already) { toast(r.error || "Try again in a few seconds", true); return; }
+    if (already) toast("Type the code already on the TV");
+    $("#pairHint").textContent = "Type the code shown on the TV.";
+    $("#pairShow").textContent = "Show a new code"; $("#pairCode").hidden = false; $("#pairCode").focus();
+  } catch (e) { toast("Can't reach the TV", true); }
+});
+$("#pairCode").addEventListener("input", async e => {
+  const code = e.target.value.replace(/\D/g, "").slice(0, 4); e.target.value = code;
+  if (code.length < 4) return;
+  try {
+    const r = await (await fetch("/api/pair/finish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) })).json();
+    if (!r.token) { e.target.value = ""; toast(r.error || "That code didn't match", true); return; }
+    try { localStorage.setItem("tvtoken", r.token); } catch (err) {}
+    tick(); location.replace(location.pathname + "?t=" + encodeURIComponent(r.token));
+  } catch (err) { toast("Can't reach the TV", true); }
+});
+if (!token) showPairing();
+/* Haptics: iOS gives the hidden switch's tick only inside a real touch moment, and lifting a finger counts while touching down does not. So keys go to the TV as soon as a finger lands (no delay), and the tick comes as it lifts; mid-swipe ticks are tried too, and work where iOS allows them. */
+const key = (k, haptic = true) => { if (haptic) tick(); return api("/api/key", { key: k }).catch(() => toast("Can't reach the TV", true)); };
+
+/*
+ * Which phone, and which layout. Two phones live here. The iPhone 18 Pro has a tall screen (402x874 points, 0.46 as wide as tall). The foldable iPhone Duo reports its outer screen, 466x678 points (0.69), whether folded or not (measured on Jun's Duo, 2026-11-04), so shape tells the phones apart. Folded or unfolded comes from the window: folded it never exceeds the outer screen (seen: 382x678, 466x438), unfolded it is at least 537 on its short side and 819 on its long side (seen: 669x819, 951x537, 951x669). The Duo shows apps only unfolded.
+ */
+function posture() {
+  const s = [Math.min(screen.width, screen.height), Math.max(screen.width, screen.height)];
+  const w = [Math.min(innerWidth, innerHeight), Math.max(innerWidth, innerHeight)];
+  const duo = s[0] / s[1] > 0.6 || (navigator.standalone && w[0] / w[1] > 0.6);
+  const kind = !duo ? "pro" : w[1] > 740 || w[0] > 500 ? "duo-open" : "duo-folded";
+  // The key for this screen's own choices. The Duo's screen size is the same folded and unfolded, so its posture is part of the key (2026-11-11: an "Apps shown" set unfolded on 11-07 had put the apps on the folded Duo too). The Pro keeps its earlier key.
+  return { kind, size: (kind === "pro" ? "" : kind + "@") + s.join("x") };
+}
+function appsOverride(size) { try { return localStorage.getItem("apps@" + size); } catch (e) { return null; } }
+function layout() {
+  const { kind, size } = posture();
+  document.body.dataset.layout = innerWidth > innerHeight * 1.05 ? "wide" : "tall";
+  document.body.dataset.apps = appsOverride(size) || (kind === "duo-folded" ? "off" : "on");
+  document.body.dataset.kind = kind;
+  report();
+}
+// Tells the TV this phone's screen, so its log shows the real sizes the layouts are tuned for.
+let reported = "";
+function report() {
+  if (AWAY) return;
+  const info = JSON.stringify({ sw: screen.width, sh: screen.height, iw: innerWidth, ih: innerHeight, dpr: devicePixelRatio, standalone: !!navigator.standalone, kind: document.body.dataset.kind, layout: document.body.dataset.layout, apps: document.body.dataset.apps });
+  if (info === reported) return;
+  reported = info;
+  fetch("/api/client", { method: "POST", headers: { "Content-Type": "application/json" }, body: info }).catch(() => {});
+}
+let resizeTimer;
+addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(layout, 120); });
+layout();
+// Long-press the TV name to show or hide the apps on this screen size; the choice is remembered per size, so the Duo keeps one for folded and one for unfolded.
+(() => { let t; const n = $("#who");
+  n.addEventListener("pointerdown", () => t = setTimeout(() => {
+    const { size } = posture(), next = document.body.dataset.apps === "on" ? "off" : "on";
+    try { localStorage.setItem("apps@" + size, next); } catch (e) {}
+    layout(); toast(next === "on" ? "Apps shown on this screen" : "Apps hidden on this screen"); tick();
+  }, 700));
+  ["pointerup", "pointercancel", "pointerleave"].forEach(e => n.addEventListener(e, () => clearTimeout(t)));
+})();
+
+/* Buttons: tap, and hold volume to repeat. */
+document.querySelectorAll("[data-k]").forEach(b => {
+  const k = b.dataset.k, repeat = k.startsWith("volume");
+  let t;
+  b.addEventListener("pointerdown", e => { e.preventDefault(); b.classList.add("down"); key(k, false); if (repeat) t = setTimeout(function again() { key(k); t = setTimeout(again, 140); }, 450); });
+  b.addEventListener("pointerup", () => tick());
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => b.addEventListener(ev, () => { b.classList.remove("down"); clearTimeout(t); }));
+});
+
+/*
+ * Clickpad (Jun, 2026-11-07: swipe from the centre, with haptics): tap the centre for OK or an edge for an arrow, hold an edge to repeat. Swipe anywhere, the centre included: the first step comes after 22 px, then one per 40 px, and a quick flick (14 px in under a quarter second) is one step. After a swipe, keeping the finger down keeps going that way, like the Siri Remote.
+ */
+(() => {
+  const pad = $("#pad"), FIRST = 22, NEXT = 40, FLICK_PX = 14, FLICK_MS = 250;
+  let start = null, origin = null, t0 = 0, steps = 0, holdTimer, holdLoop, idleTimer;
+  const flash = dir => { const el = dir === "ok" ? $("#ok") : $(".chev." + dir[0]); if (!el) return; el.classList.add("hit"); setTimeout(() => el.classList.remove("hit"), 160); };
+  const send = (dir, haptic) => { flash(dir); key(dir, haptic); };
+  const dirOf = (dx, dy) => Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+  const stop = () => { clearTimeout(holdTimer); clearTimeout(idleTimer); clearInterval(holdLoop); holdLoop = null; };
+  function zone(x, y) {
+    const r = pad.getBoundingClientRect(), dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height / 2);
+    if (Math.hypot(dx, dy) < r.width * 0.2) return "ok";
+    return dirOf(dx, dy);
+  }
+  function ripple(x, y) {
+    const r = pad.getBoundingClientRect(), el = document.createElement("div");
+    el.className = "ripple"; el.style.left = (x - r.left) + "px"; el.style.top = (y - r.top) + "px";
+    pad.appendChild(el); setTimeout(() => el.remove(), 500);
+  }
+  // A finger resting after a swipe step keeps scrolling that way.
+  const keepGoing = dir => { clearTimeout(idleTimer); clearInterval(holdLoop); idleTimer = setTimeout(() => { holdLoop = setInterval(() => send(dir, true), 120); }, 380); };
+  pad.addEventListener("pointerdown", e => {
+    e.preventDefault(); try { pad.setPointerCapture(e.pointerId); } catch (err) {}
+    start = origin = { x: e.clientX, y: e.clientY }; t0 = performance.now(); steps = 0; ripple(e.clientX, e.clientY);
+    const z = zone(e.clientX, e.clientY);
+    if (z !== "ok") holdTimer = setTimeout(() => { steps++; send(z, true); holdLoop = setInterval(() => send(z, true), 130); }, 450);
+  });
+  pad.addEventListener("pointermove", e => {
+    if (!start) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < (steps ? NEXT : FIRST)) return;
+    clearTimeout(holdTimer); clearInterval(holdLoop);
+    const dir = dirOf(dx, dy);
+    steps++; send(dir, true);
+    start = { x: e.clientX, y: e.clientY };
+    keepGoing(dir);
+  });
+  const end = e => {
+    if (!start) return;
+    stop();
+    if (e.type === "pointerup") {
+      const dx = e.clientX - origin.x, dy = e.clientY - origin.y;
+      if (steps) tick(); // the one tick iOS surely allows: as the finger lifts
+      else if (Math.max(Math.abs(dx), Math.abs(dy)) >= FLICK_PX && performance.now() - t0 < FLICK_MS) send(dirOf(dx, dy), true);
+      else send(zone(e.clientX, e.clientY), true);
+    }
+    start = null;
+  };
+  pad.addEventListener("pointerup", end); pad.addEventListener("pointercancel", end);
+})();
+
+/* Typing: while a text box is open on the TV, each letter shows up there as it is typed; Go submits. With no text box open, Go asks the app in front to search (Stremio, YouTube, Play Store). */
+let asking = null, liveTimer;
+function keyboardPrompt(k, searchApp) {
+  const was = asking; asking = k && k.app ? k : null;
+  const form = $("#type"), input = $("#t");
+  form.classList.toggle("asking", !!asking);
+  input.type = asking && asking.password ? "password" : "text";
+  input.placeholder = asking ? asking.app + (asking.hint ? ": " + asking.hint : ": type here") : searchApp ? "Search " + searchApp : "Type on the TV";
+  if (asking && !was && document.activeElement !== input) { tick(); toast(asking.app + " is asking for text. Tap the box to type."); }
+  if (!asking && was && document.activeElement !== input) input.value = "";
+}
+// One request in flight at a time, always carrying the latest text, so letters never arrive out of order.
+let liveBusy = false, liveAgain = false;
+async function sendLive() {
+  if (liveBusy) { liveAgain = true; return; }
+  liveBusy = true;
+  try { await api("/api/text", { text: $("#t").value }); } catch (e) {}
+  liveBusy = false;
+  if (liveAgain) { liveAgain = false; sendLive(); }
+}
+$("#t").addEventListener("input", () => {
+  clearTimeout(liveTimer);
+  if (asking) liveTimer = setTimeout(sendLive, 80);
+});
+$("#type").addEventListener("submit", async e => {
+  e.preventDefault();
+  clearTimeout(liveTimer);
+  const text = $("#t").value; if (!text) return;
+  tick();
+  try { const r = await api("/api/text", { text, submit: true }); if (r.result === "ok" || r.result.startsWith("searched")) { $("#t").value = ""; $("#t").blur(); toast(r.result === "ok" ? "Sent" : "Searching"); } else toast(r.result, true); }
+  catch (err) { toast("Can't reach the TV", true); }
+});
+
+/* Power and VPN follow the TV's state. */
+let tv = null;
+$("#power").addEventListener("click", async () => {
+  tick();
+  const on = !(tv && tv.screenOn);
+  try { await api("/api/power", { on }); toast(on ? "Turning the TV on" : "Turning the TV off"); setTimeout(refresh, 1500); }
+  catch (e) { toast("Can't reach the TV. Turn it on with the TV remote.", true); }
+});
+$("#vpn").addEventListener("click", async () => {
+  tick(); toast("Switching VPN");
+  try { const r = await api("/api/vpn", { on: !(tv && tv.vpn && tv.vpn.on) }); toast(r.result, r.result.startsWith("VPN failed")); setTimeout(refresh, 1200); }
+  catch (e) { toast("Can't reach the TV", true); }
+});
+
+function render(status) {
+    tv = status;
+    $("#name").textContent = tv.name || "TV";
+    $("#power").classList.toggle("on", tv.screenOn);
+    const playing = (tv.nowPlaying || []).find(p => p.state === "playing" && p.title);
+    $("#state").textContent = !tv.screenOn ? "Standby" : playing ? "Playing " + playing.title : tv.online ? "On" : "On, no internet";
+    const vpnOn = !!(tv.vpn && tv.vpn.on);
+    $("#vpn").textContent = vpnOn ? "VPN on" : "VPN off"; $("#vpn").classList.toggle("on", vpnOn);
+    alarmButton(tv.alarm); wakeMode(tv.alarm); keyboardPrompt(tv.keyboard, tv.search);
+}
+function renderError(e) { tv = null; $("#state").textContent = e.message === "unauthorized" ? "Not paired" : "Can't reach the TV"; $("#power").classList.remove("on"); }
+async function refresh() { try { render(await api("/api/status")); } catch (e) { renderError(e); } }
+
+/*
+ * Status follows the TV as it changes: the TV holds each request until something changes (a text box opens, the alarm starts, the screen turns off) or 20 seconds pass, then the phone asks again. A text box opening on the TV lights the phone up within a fraction of a second. Coming back to the foreground starts a fresh request, since iOS may have frozen the one in flight.
+ */
+let version = 0, pollGen = 0, pollCtl = null;
+const pause = ms => new Promise(r => setTimeout(r, ms));
+async function follow() {
+  if (AWAY) { awayRefresh(); return; }
+  const my = ++pollGen;
+  if (pollCtl) pollCtl.abort();
+  while (my === pollGen && !document.hidden) {
+    const ctl = pollCtl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
+    try {
+      const r = await fetch("/api/status" + (version ? "?wait=" + version : ""), { headers: { "Authorization": "Bearer " + token }, signal: ctl.signal });
+      clearTimeout(timer);
+      if (r.status === 401) { showPairing(); renderError(new Error("unauthorized")); return; }
+      const s = await r.json();
+      if (my !== pollGen) return;
+      render(s);
+      version = s.version || 0;
+      if (!s.version) await pause(2000);
+    } catch (e) {
+      clearTimeout(timer);
+      if (my !== pollGen) return;
+      renderError(e); version = 0; await pause(2000);
+    }
+  }
+}
+
+/* Away: one request brings the TV's state and the alarm; nothing is polled, as the relay allows 250 answers a day. */
+let awayGen = 0;
+async function awayRefresh() {
+  const my = ++awayGen;
+  try {
+    const h = await api("/relay/hello");
+    if (my !== awayGen) return;
+    render(h.status); alarmData = h.alarm; awayShow();
+  } catch (e) { renderError(e); $("#awayWhen").textContent = e.message === "unauthorized" ? "Not set up" : e.message; }
+}
+function awayShow() {
+  const next = alarmData && alarmData.status && alarmData.status.next;
+  if (!next) { $("#awayNext").textContent = "No alarm"; $("#awayWhen").textContent = "None in the next two weeks"; return; }
+  const d = new Date(next.date + "T12:00:00"), today = new Date();
+  const days = Math.round((new Date(d.toDateString()) - new Date(today.toDateString())) / 864e5);
+  $("#awayNext").textContent = show(next.time);
+  $("#awayWhen").textContent = "Up by, " + (days === 0 ? "today" : days === 1 ? "tomorrow" : d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }));
+}
+if (AWAY) $("#awayAlarm").addEventListener("click", () => $("#alarmBtn").click());
+
+const GLYPHS = {
+  settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>',
+  hdmi: '<svg viewBox="0 0 24 24"><path d="M3 8h18v5l-3 3H6l-3-3z"/><path d="M8 11h8"/></svg>',
+};
+async function loadApps() {
+  if (AWAY) return;
+  try {
+    const apps = await api("/api/apps"), grid = $("#apps");
+    grid.innerHTML = "";
+    apps.forEach(a => {
+      const b = document.createElement("button"); b.className = "app"; b.setAttribute("aria-label", a.label);
+      if (a.key.startsWith("app:")) b.style.backgroundImage = `url("/api/icon?pkg=${encodeURIComponent(a.key.slice(4))}&t=${encodeURIComponent(token)}")`;
+      else b.innerHTML = `<span class="glyph">${GLYPHS[a.key] || ""}${a.label}</span>`;
+      b.addEventListener("click", async () => { tick(); try { const r = await api("/api/launch", { app: a.key }); toast(r.result); } catch (e) { toast("Can't reach the TV", true); } });
+      grid.appendChild(b);
+    });
+  } catch (e) {}
+}
+
+/* Alarm settings. Times are when Jun has to be up by, in 5-minute steps. */
+const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+const short = d => d[0] + d.slice(1, 3).toLowerCase();
+const show = t => t ? t.replace(/^0/, "") : "Off";
+let alarmData = null, alarmTab = "week", extraDates = [];
+// A date beyond the next two weeks: its setting, worked out the same way the TV does (its own time, or its weekday's).
+function dayInfo(date) {
+  const wd = DAYS[(new Date(date + "T12:00:00").getDay() + 6) % 7], changed = date in alarmData.dates;
+  const time = changed ? alarmData.dates[date] : alarmData.days[wd].on ? alarmData.days[wd].time : null;
+  return { date, weekday: wd, time, changed, turnedOff: false };
+}
+function timePicker(time, onChange) {
+  const [h, m] = (time || "07:20").split(":");
+  const wrap = document.createElement("span"); wrap.className = "when";
+  const hs = document.createElement("select"), ms = document.createElement("select");
+  for (let i = 0; i < 24; i++) hs.add(new Option(String(i), String(i).padStart(2, "0"), false, +h === i));
+  for (let i = 0; i < 60; i += 5) ms.add(new Option(String(i).padStart(2, "0"), String(i).padStart(2, "0"), false, +m === i));
+  const fire = () => onChange(hs.value + ":" + ms.value);
+  hs.addEventListener("change", fire); ms.addEventListener("change", fire);
+  const colon = document.createElement("span"); colon.textContent = ":";
+  wrap.append(hs, colon, ms);
+  return wrap;
+}
+function row(title, note, noteChanged, on, time, onToggle, onTime, onUsual) {
+  const r = document.createElement("div"); r.className = "row" + (on ? "" : " off");
+  const what = document.createElement("div"); what.className = "what";
+  what.innerHTML = `<b></b><small${noteChanged ? ' class="changed"' : ""}></small>`;
+  what.querySelector("b").textContent = title; what.querySelector("small").textContent = note;
+  const sw = document.createElement("input"); sw.type = "checkbox"; sw.setAttribute("switch", ""); sw.checked = on;
+  sw.addEventListener("change", () => { tick(); onToggle(sw.checked); });
+  const right = document.createElement("span"); right.style.display = "flex"; right.style.alignItems = "center"; right.style.gap = "8px";
+  if (onUsual) { const u = document.createElement("button"); u.className = "usual"; u.textContent = "Usual"; u.addEventListener("click", () => { tick(); onUsual(); }); right.append(u); }
+  right.append(timePicker(time, t => { tick(); onTime(t); }));
+  r.append(what, right, sw);
+  return r;
+}
+function renderAlarm() {
+  if (!alarmData) return;
+  const list = $("#alarmList"); list.innerHTML = "";
+  $("#tabWeek").classList.toggle("on", alarmTab === "week"); $("#tabDays").classList.toggle("on", alarmTab === "days");
+  if (alarmTab === "week") {
+    DAYS.forEach(d => {
+      const v = alarmData.days[d];
+      list.append(row(d[0] + d.slice(1).toLowerCase(), v.on ? "Up by " + show(v.time) : "No alarm", false, v.on, v.time,
+        on => changeAlarm({ day: d, on }), time => changeAlarm({ day: d, on: true, time })));
+    });
+    // How the alarm turns off: the math puzzle, or scanning the QR code (shown here to save or print).
+    const m = alarmData.mission || { kind: "math" }, r = document.createElement("div"); r.className = "row mission";
+    r.innerHTML = '<span class="what"><b>Turn off by</b><small></small></span><span class="acts"></span>';
+    r.querySelector("small").textContent = m.kind === "scan" ? "Scanning your " + m.code : "Math puzzle";
+    const acts = r.querySelector(".acts"), act = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.addEventListener("click", () => { tick(); fn(); }); acts.append(b); };
+    if (m.kind === "scan") {
+      act("Show QR code", showQr);
+      act("Test scan", () => { toast("Take the photo, then tap Use Photo"); takePhoto("test"); });
+      act("Use math", async () => { const x = await api("/api/alarm/mission/clear", {}); if (x.error) toast(x.error, true); else loadAlarmSheet(); });
+    } else {
+      act("Make a QR code", async () => { const x = await api("/api/alarm/mission/new-qr", {}); if (x.error) { toast(x.error, true); return; } toast("QR code made. Save or print it, then try a test scan."); loadAlarmSheet(); });
+    }
+    list.append(r);
+    if (!AWAY) list.append(awayRows());
+  } else {
+    const shown = new Set(alarmData.upcoming.map(u => u.date));
+    const later = [...new Set([...Object.keys(alarmData.dates), ...extraDates])].filter(d => !shown.has(d) && d > alarmData.upcoming[0].date).sort().map(dayInfo);
+    [...alarmData.upcoming, ...later].forEach((u, i) => {
+      const date = new Date(u.date + "T12:00:00");
+      const title = (i === 0 ? "Today" : i === 1 ? "Tomorrow" : short(u.weekday)) + " " + (i < 14 ? date.getDate() : date.toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+      const usual = alarmData.days[u.weekday];
+      const note = u.turnedOff ? "Done for today" : u.changed ? (u.time ? "Changed for this day" : "Off this day") : "Usual";
+      list.append(row(title, note, u.changed, !!u.time, u.time || usual.time,
+        on => changeAlarm(on ? { date: u.date, time: u.time || usual.time } : { date: u.date, off: true }),
+        time => changeAlarm({ date: u.date, time }),
+        u.changed ? () => changeAlarm({ date: u.date, usual: true }) : null));
+    });
+    // Any other date, for a holiday or trip further out.
+    const pick = document.createElement("label"); pick.className = "row";
+    pick.innerHTML = '<span class="what"><b>Another date</b><small>Pick a day to change</small></span><input type="date" style="font:inherit;font-size:16px;color:var(--ink);background:var(--pressed);border:0;border-radius:9px;height:36px;padding:0 8px">';
+    const input = pick.querySelector("input"); input.min = alarmData.upcoming[0].date;
+    input.addEventListener("change", () => { if (input.value && !extraDates.includes(input.value)) extraDates.push(input.value); renderAlarm(); });
+    list.append(pick);
+  }
+}
+/* At home only: adding the TV to Apple's Home app (its setup code), and the alarm from anywhere (the HTTPS copy of this page, through the relay). */
+let awayInfo = null;
+function awayRows() {
+  const box = document.createElement("div"); box.className = "row mission";
+  const h = awayInfo && awayInfo.homekit, rel = awayInfo && awayInfo.relay;
+  box.innerHTML = '<span class="what"><b>Apple Home</b><small id="hkNote"></small></span><span class="what"><b>From anywhere</b><small id="relNote"></small></span><span class="acts"></span>';
+  box.querySelector("#hkNote").textContent = !h ? "Checking" : h.paired ? "Added to the Home app: the TV works from Control Center's remote and away from home" : "In the Home app: +, Add Accessory, More options, Bedroom TV, then code " + h.code;
+  box.querySelector("#relNote").textContent = !rel ? "Checking" : "Change the alarm when you're out. " + (rel.connected ? "The TV is connected to the relay." : "The TV is not connected to the relay right now.");
+  const b = document.createElement("button"); b.textContent = "Set up from anywhere";
+  b.addEventListener("click", () => { tick(); if (rel) window.open(rel.page + "#k=" + encodeURIComponent(token), "_blank"); });
+  box.querySelector(".acts").append(b);
+  if (!awayInfo) api("/api/away").then(r => { awayInfo = r; if (!$("#alarmSheet").hidden && alarmTab === "week") renderAlarm(); }).catch(() => {});
+  return box;
+}
+
+async function changeAlarm(body) {
+  try {
+    const r = await api("/api/alarm", body);
+    if (r.error) { toast(r.error, true); return; }
+    alarmData = r; renderAlarm(); alarmButton(r.status); if (AWAY) awayShow();
+  } catch (e) { toast("Can't reach the TV", true); }
+}
+function alarmButton(a) {
+  const next = a && a.next;
+  if (!next) { $("#alarmNext").textContent = "Off"; $("#alarmBtn").classList.remove("set"); return; }
+  const today = new Date(), d = new Date(next.date + "T12:00:00");
+  const days = Math.round((new Date(d.toDateString()) - new Date(today.toDateString())) / 864e5);
+  $("#alarmNext").textContent = (days <= 1 ? "" : short(DAYS[(d.getDay() + 6) % 7]) + " ") + show(next.time);
+  $("#alarmBtn").classList.add("set");
+}
+async function loadAlarmSheet() { alarmData = await api("/api/alarm"); renderAlarm(); if (AWAY) awayShow(); }
+$("#alarmBtn").addEventListener("click", async () => {
+  tick();
+  try { alarmTab = "week"; await loadAlarmSheet(); $("#alarmSheet").hidden = false; } catch (e) { toast("Can't reach the TV", true); }
+});
+$("#alarmDone").addEventListener("click", () => { tick(); $("#alarmSheet").hidden = true; });
+$("#tabWeek").addEventListener("click", () => { tick(); alarmTab = "week"; renderAlarm(); });
+$("#tabDays").addEventListener("click", () => { tick(); alarmTab = "days"; renderAlarm(); });
+
+/* The alarm hour: one button, then three sums in a row. A wrong answer starts the count again. */
+let typed = "", puzzleOpen = false;
+function wakeMode(a) {
+  const on = !!(a && a.active);
+  if (Date.now() < wakeDoneUntil) return;
+  $("#wake").hidden = !on;
+  if (!on) { puzzleOpen = false; $("#puzzle").hidden = true; $("#scan").hidden = true; $("#wakeButtons").hidden = false; return; }
+  $("#wakeBy").textContent = "Up by " + show(a.wakeBy);
+  $("#wakeState").textContent = a.ringing ? "Ringing" : a.nextRing ? "Next ring at " + a.nextRing : "";
+  $("#ringStop").disabled = !a.ringing;
+  $("#ringStop").textContent = a.ringing ? "Stop this ring" : a.nextRing ? "Quiet until " + a.nextRing : "Quiet for now";
+  if (puzzleOpen && a.puzzle && !typed) showPuzzle(a.puzzle);
+}
+function showPuzzle(p) {
+  $("#question").textContent = p.question;
+  $("#dots").innerHTML = Array.from({ length: p.needed }, (_, i) => `<i class="${i < p.solved ? "on" : ""}"></i>`).join("");
+}
+$("#ringStop").addEventListener("click", async () => {
+  tick();
+  try { const a = await api("/api/alarm/stop-ring", {}); if (a.active) { wakeMode(a); toast(a.nextRing ? "Quiet until " + a.nextRing : "Ring stopped"); } } catch (e) { toast("Can't reach the TV", true); }
+});
+$("#wakeOff").addEventListener("click", () => {
+  tick();
+  if (tv && tv.alarm && tv.alarm.puzzle && tv.alarm.puzzle.mission && tv.alarm.puzzle.mission.kind === "scan") {
+    scanState("ready", "Scan your " + tv.alarm.puzzle.mission.code);
+    $("#wakeButtons").hidden = true; $("#scan").hidden = false; return;
+  }
+  puzzleOpen = true; typed = ""; $("#answer").textContent = " ";
+  $("#wakeButtons").hidden = true; $("#puzzle").hidden = false;
+  if (tv && tv.alarm && tv.alarm.puzzle) showPuzzle(tv.alarm.puzzle);
+});
+$("#scanGo").addEventListener("click", () => { tick(); takePhoto("alarm"); });
+$("#scanBack").addEventListener("click", () => { tick(); $("#scan").hidden = true; $("#wakeButtons").hidden = false; });
+["1", "2", "3", "4", "5", "6", "7", "8", "9", "del", "0", "go"].forEach(k => {
+  const b = document.createElement("button"); b.textContent = k === "del" ? "⌫" : k === "go" ? "OK" : k; if (k === "go") b.className = "go";
+  b.addEventListener("click", async () => {
+    tick();
+    if (k === "del") typed = typed.slice(0, -1);
+    else if (k !== "go") typed = (typed + k).slice(0, 4);
+    $("#answer").textContent = typed || " ";
+    if (k !== "go" || !typed) return;
+    try {
+      const r = await api("/api/alarm/answer", { answer: +typed });
+      typed = "";
+      if (r.done) { alarmOff(); return; }
+      if (!r.correct) { const el = $("#answer"); el.classList.remove("wrong"); void el.offsetWidth; el.classList.add("wrong"); el.textContent = "Try this one"; }
+      else $("#answer").textContent = " ";
+      showPuzzle(r);
+    } catch (e) { toast("Can't reach the TV", true); }
+  });
+  $("#numpad").append(b);
+});
+setInterval(() => { const n = new Date(); $("#wakeClock").textContent = n.getHours() + ":" + String(n.getMinutes()).padStart(2, "0"); }, 1000);
+
+/* Opening the remote turns the TV on when it is off (Jun, 2026-11-11), coming back to it from another app included. It only ever turns the TV on: opening and closing it never turn it off. The TV answers at once when its screen is already on. */
+let wokeAt = 0;
+function wakeOnOpen() {
+  if (AWAY || !token || document.hidden || Date.now() - wokeAt < 5000) return;
+  wokeAt = Date.now();
+  api("/api/wake", {}).then(r => { if (r && r.ok && !(tv && tv.screenOn)) setTimeout(refresh, 1500); }).catch(() => {});
+}
+follow(); loadApps(); wakeOnOpen();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { version = 0; follow(); loadApps(); wakeOnOpen(); } });
+addEventListener("pageshow", e => { if (e.persisted) wakeOnOpen(); });
+// No pinch or double-tap zoom: it is a remote, not a page.
+document.addEventListener("gesturestart", e => e.preventDefault());
+</script>
+</body>
+</html>
