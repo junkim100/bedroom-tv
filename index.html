@@ -909,12 +909,12 @@ $("#scanBack").addEventListener("click", () => { tick(); $("#scan").hidden = tru
 });
 setInterval(() => { const n = new Date(); $("#wakeClock").textContent = n.getHours() + ":" + String(n.getMinutes()).padStart(2, "0"); }, 1000);
 
-/* Opening the remote turns the TV on when it is off (Jun, 2026-11-11), coming back to it from another app included. It only ever turns the TV on: opening and closing it never turn it off. The TV answers at once when its screen is already on. */
+/* Opening the remote turns the TV on when it is off (Jun, 2026-11-11), coming back to it from another app included. It only ever turns the TV on: opening and closing it never turn it off. The TV answers at once when its screen is already on. At night, if nothing is pressed, the TV goes back to standby after 2 minutes (SleepPolicy). */
 let wokeAt = 0;
 function wakeOnOpen() {
   if (AWAY || !token || document.hidden || Date.now() - wokeAt < 5000) return;
   wokeAt = Date.now();
-  api("/api/wake", {}).then(r => { if (r && r.ok && !(tv && tv.screenOn)) setTimeout(refresh, 1500); }).catch(() => {});
+  api("/api/wake", { opened: true }).then(r => { if (r && r.ok && !(tv && tv.screenOn)) setTimeout(refresh, 1500); }).catch(() => {});
 }
 follow(); loadApps(); wakeOnOpen();
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { version = 0; follow(); loadApps(); wakeOnOpen(); } });
