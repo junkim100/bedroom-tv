@@ -702,11 +702,11 @@ async function awayRefresh() {
 }
 function awayShow() {
   const next = alarmData && alarmData.status && alarmData.status.next;
-  if (!next) { $("#awayNext").textContent = "No alarm"; $("#awayWhen").textContent = "None in the next two weeks"; return; }
+  if (!next) { $("#awayNext").textContent = "Off"; $("#awayWhen").textContent = "No alarm in the next two weeks"; return; }
   const d = new Date(next.date + "T12:00:00"), today = new Date();
   const days = Math.round((new Date(d.toDateString()) - new Date(today.toDateString())) / 864e5);
   $("#awayNext").textContent = show(next.time);
-  $("#awayWhen").textContent = "Up by, " + (days === 0 ? "today" : days === 1 ? "tomorrow" : d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }));
+  $("#awayWhen").textContent = "Next alarm: " + (days === 0 ? "today" : days === 1 ? "tomorrow" : d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }));
 }
 if (AWAY) $("#awayAlarm").addEventListener("click", () => $("#alarmBtn").click());
 
@@ -780,7 +780,9 @@ function renderAlarm() {
     r.innerHTML = '<span class="what"><b>Turn off by</b><small></small></span><span class="acts"></span>';
     r.querySelector("small").textContent = m.kind === "scan" ? "Scanning your " + m.code : "Math puzzle";
     const acts = r.querySelector(".acts"), act = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.addEventListener("click", () => { tick(); fn(); }); acts.append(b); };
-    if (m.kind === "scan") {
+    // Away, the buttons stay hidden: they need the TV's own page (photos, and a new code retires the printed one).
+    if (AWAY) acts.style.display = "none";
+    else if (m.kind === "scan") {
       act("Show QR code", showQr);
       act("Test scan", () => { toast("Take the photo, then tap Use Photo"); takePhoto("test"); });
       act("Use math", async () => { const x = await api("/api/alarm/mission/clear", {}); if (x.error) toast(x.error, true); else loadAlarmSheet(); });
