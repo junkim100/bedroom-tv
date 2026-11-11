@@ -827,9 +827,13 @@ function awayRows() {
   return box;
 }
 
+// Only the latest change's answer redraws the list: an earlier answer arriving late (a second away, through the relay) would put back a time just changed, and the next pick would send that old hour (seen in testing, 2026-11-12).
+let alarmSeq = 0;
 async function changeAlarm(body) {
+  const my = ++alarmSeq;
   try {
     const r = await api("/api/alarm", body);
+    if (my !== alarmSeq) return;
     if (r.error) { toast(r.error, true); return; }
     alarmData = r; renderAlarm(); alarmButton(r.status); if (AWAY) awayShow();
   } catch (e) { toast("Can't reach the TV", true); }
