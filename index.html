@@ -603,14 +603,15 @@ document.querySelectorAll("[data-k]").forEach(b => {
 })();
 
 /* Typing: while a text box is open on the TV, each letter shows up there as it is typed; Go submits. With no text box open, Go asks the app in front to search (Stremio, YouTube, Play Store). */
-let asking = null, liveTimer;
+// Until this time a search sent with Go is still opening the app's own search box (Stremio), so that box lighting up is not a new request for text.
+let asking = null, liveTimer, searchingUntil = 0;
 function keyboardPrompt(k, searchApp) {
   const was = asking; asking = k && k.app ? k : null;
   const form = $("#type"), input = $("#t");
   form.classList.toggle("asking", !!asking);
   input.type = asking && asking.password ? "password" : "text";
   input.placeholder = asking ? asking.app + (asking.hint ? ": " + asking.hint : ": type here") : searchApp ? "Search " + searchApp : "Type on the TV";
-  if (asking && !was && document.activeElement !== input) { tick(); toast(asking.app + " is asking for text. Tap the box to type."); }
+  if (asking && !was && document.activeElement !== input && Date.now() > searchingUntil) { tick(); toast(asking.app + " is asking for text. Tap the box to type."); }
   if (!asking && was && document.activeElement !== input) input.value = "";
 }
 // One request in flight at a time, always carrying the latest text, so letters never arrive out of order.
@@ -630,9 +631,10 @@ $("#type").addEventListener("submit", async e => {
   e.preventDefault();
   clearTimeout(liveTimer);
   const text = $("#t").value; if (!text) return;
-  tick();
+  tick(); searchingUntil = Date.now() + 20000;
   try { const r = await api("/api/text", { text, submit: true }); if (r.result === "ok" || r.result.startsWith("searched")) { $("#t").value = ""; $("#t").blur(); toast(r.result === "ok" ? "Sent" : "Searching"); } else toast(r.result, true); }
   catch (err) { toast("Can't reach the TV", true); }
+  searchingUntil = Date.now() + 2000;
 });
 
 /* Power and VPN follow the TV's state. */
