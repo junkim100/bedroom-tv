@@ -48,16 +48,21 @@
   svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
   /* Top bar: power, TV name and what it is doing, VPN. */
-  #top { grid-area: top; display: grid; grid-template-columns: 44px 1fr auto auto; align-items: center; gap: 10px; min-height: 48px; }
-  #alarmBtn { height: 34px; padding: 0 12px; border-radius: 17px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--muted); }
+  #top { grid-area: top; display: grid; grid-template-columns: 44px 1fr auto auto; align-items: center; gap: 8px; min-height: 48px; }
+  #alarmBtn { height: 34px; padding: 0 10px; border-radius: 17px; display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 600; color: var(--muted); }
   #alarmBtn svg { width: 16px; height: 16px; }
   #alarmBtn.set { color: var(--ink); }
   #power { width: 44px; height: 44px; border-radius: 50%; color: var(--muted); }
   #power.on { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--edge); }
-  #who { min-width: 0; line-height: 1.2; }
-  #name { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  /* The TV's name opens Settings (the gear says so); holding it shows or hides the apps on this screen. The bar's gaps and pills are a little tighter than before the gear, so "Bedroom TV" still fits beside "Mon 7:20" on the 18 Pro. */
+  #who { min-width: 0; line-height: 1.2; cursor: pointer; }
+  #who:active { opacity: .7; }
+  #name { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  #nameText { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #name svg { flex: none; width: 14px; height: 14px; color: var(--muted); }
+  body[data-away] #name svg { display: none; }
   #state { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #vpn { height: 34px; padding: 0 14px; border-radius: 17px; font-size: 14px; font-weight: 600; color: var(--muted); }
+  #vpn { height: 34px; padding: 0 12px; border-radius: 17px; font-size: 14px; font-weight: 600; color: var(--muted); }
   #vpn.on { color: var(--night); background: var(--on); }
   /* The pills look 34 points tall; their touch area is 44, as iOS expects (checked at every Duo and Pro size, 2026-11-09). */
   #alarmBtn, #vpn { position: relative; }
@@ -138,7 +143,8 @@
   .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--key); border-radius: 12px; }
   .tabs button { height: 34px; font-size: 14px; font-weight: 600; color: var(--muted); background: transparent; border-radius: 9px; }
   .tabs button.on { color: var(--ink); background: var(--pressed); }
-  .list { overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; align-content: start; gap: 6px; }
+  /* Rows keep their content's height and the list scrolls: with the default row sizing, a list taller than the sheet squeezed its rows to their 50-point minimum, and text ran over the next row (the folded Duo, seen by Jun 2026-11-13). */
+  .list { overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; grid-auto-rows: max-content; align-content: start; gap: 6px; }
   .row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; min-height: 50px; padding: 0 12px; background: var(--key); border-radius: var(--r-key); }
   .row .what { line-height: 1.2; }
   .row .what b { display: block; font-size: 16px; font-weight: 600; }
@@ -148,7 +154,20 @@
   .when { display: flex; align-items: center; gap: 2px; }
   .when select { height: 36px; padding: 0 6px; font: inherit; font-size: 17px; font-weight: 600; color: var(--ink); background: var(--pressed); border: 0; border-radius: 9px; -webkit-appearance: none; appearance: none; text-align: center; }
   .row .usual { height: 30px; padding: 0 10px; font-size: 12px; color: var(--signal); background: transparent; }
-  .row input[type=checkbox] { width: 44px; height: 26px; accent-color: var(--on); }
+  .row input[type=checkbox], .group input[type=checkbox] { flex: none; width: 44px; height: 26px; margin: 0; accent-color: var(--on); }
+  /* Settings: one card per thing set up, two side by side on wide screens. */
+  #settingsSheet { grid-template-rows: auto minmax(0, 1fr); }
+  #settingsList { gap: 10px; }
+  body[data-layout="wide"] #settingsList { grid-template-columns: 1fr 1fr; align-items: start; }
+  .group { display: grid; gap: 10px; padding: 14px; background: var(--key); border-radius: var(--r-key); }
+  .group h3 { margin: 0; min-height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 16px; font-weight: 600; }
+  .group .chip { flex: none; padding: 3px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--pressed); }
+  .group .chip.on { color: var(--night); background: var(--on); }
+  .group p { margin: 0; font-size: 14px; line-height: 1.4; }
+  .group p b { font-weight: 600; }
+  .group p.note { font-size: 13px; color: var(--muted); }
+  .group .go { justify-self: start; height: 40px; padding: 0 16px; font-size: 15px; font-weight: 600; color: var(--night); background: var(--signal); }
+  .group .go:disabled { color: var(--muted); background: var(--pressed); }
 
   /* The alarm hour: the remote becomes one button and the puzzle. */
   #wake { position: fixed; inset: 0; z-index: 6; display: grid; grid-template-rows: 1fr auto; padding: max(24px, env(safe-area-inset-top)) 22px max(24px, env(safe-area-inset-bottom));
@@ -220,7 +239,7 @@
 <body data-layout="tall" data-apps="on">
 <header id="top">
   <button id="power" aria-label="Power"><svg viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg></button>
-  <div id="who"><div id="name">TV</div><div id="state">Connecting</div></div>
+  <div id="who" role="button" tabindex="0" aria-label="Settings"><div id="name"><span id="nameText">TV</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div><div id="state">Connecting</div></div>
   <button id="alarmBtn" aria-label="Alarm"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 2"/><path d="M5 4L2 7"/><path d="M19 4l3 3"/></svg><span id="alarmNext">Alarm</span></button>
   <button id="vpn" aria-label="VPN">VPN</button>
 </header>
@@ -260,12 +279,17 @@
   <p id="awayNext">&nbsp;</p>
   <p id="awayWhen">Asking the TV</p>
   <button id="awayAlarm">Change the alarm</button>
-  <p id="awayNote">You're using the TV from away. Open the Home app for the arrows and apps.</p>
+  <p id="awayNote">You're using the TV from away. For the arrows, use Remote in Control Center. For apps, use the Home app.</p>
 </section>
 <section id="alarmSheet" class="sheet" hidden aria-label="Alarm">
   <header><h2>Wake up by</h2><button id="alarmDone">Done</button></header>
   <div class="tabs"><button id="tabWeek" class="on">Every week</button><button id="tabDays">Dates</button></div>
   <div id="alarmList" class="list"></div>
+</section>
+
+<section id="settingsSheet" class="sheet" hidden aria-label="Settings">
+  <header><h2>Settings</h2><button id="settingsDone">Done</button></header>
+  <div id="settingsList" class="list"></div>
 </section>
 
 <section id="wake" hidden aria-label="Alarm">
@@ -472,7 +496,7 @@ $("#camera").addEventListener("change", async e => {
 /* Pairing by code: the TV shows 4 digits, this phone sends them back and gets the key. It works inside a home-screen app, whose storage is its own. */
 function showPairing() {
   $("#pair").hidden = false;
-  if (AWAY) { $("#pair h1").textContent = "Set up at home"; $("#pairHint").textContent = "Open the TV remote on the home Wi-Fi, tap the alarm, then Set up under From anywhere."; $("#pairShow").hidden = true; }
+  if (AWAY) { $("#pair h1").textContent = "Set up at home"; $("#pairHint").textContent = "Open the TV remote on the home Wi-Fi, tap the TV's name, then Set up in Safari."; $("#pairShow").hidden = true; }
 }
 $("#pairShow").addEventListener("click", async () => {
   tick();
@@ -517,6 +541,7 @@ function layout() {
   document.body.dataset.layout = innerWidth > innerHeight * 1.05 ? "wide" : "tall";
   document.body.dataset.apps = appsOverride(size) || (kind === "duo-folded" ? "off" : "on");
   document.body.dataset.kind = kind;
+  const sw = $("#appsSwitch"); if (sw) sw.checked = document.body.dataset.apps === "on";
   report();
 }
 // Tells the TV this phone's screen, so its log shows the real sizes the layouts are tuned for.
@@ -531,14 +556,21 @@ function report() {
 let resizeTimer;
 addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(layout, 120); });
 layout();
-// Long-press the TV name to show or hide the apps on this screen size; the choice is remembered per size, so the Duo keeps one for folded and one for unfolded.
-(() => { let t; const n = $("#who");
-  n.addEventListener("pointerdown", () => t = setTimeout(() => {
-    const { size } = posture(), next = document.body.dataset.apps === "on" ? "off" : "on";
-    try { localStorage.setItem("apps@" + size, next); } catch (e) {}
-    layout(); toast(next === "on" ? "Apps shown on this screen" : "Apps hidden on this screen"); tick();
-  }, 700));
+// Apps shown or hidden on this screen, remembered per size, so the Duo keeps one choice for folded and one for unfolded: in Settings, or by holding the TV's name.
+function setApps(next) {
+  const { size } = posture();
+  try { localStorage.setItem("apps@" + size, next); } catch (e) {}
+  layout();
+}
+// A tap on the TV's name opens Settings; holding it switches the apps.
+(() => { let t, held = false; const n = $("#who");
+  n.addEventListener("pointerdown", () => { held = false; t = setTimeout(() => {
+    held = true; const next = document.body.dataset.apps === "on" ? "off" : "on";
+    setApps(next); toast(next === "on" ? "Apps shown on this screen" : "Apps hidden on this screen"); tick();
+  }, 700); });
   ["pointerup", "pointercancel", "pointerleave"].forEach(e => n.addEventListener(e, () => clearTimeout(t)));
+  n.addEventListener("click", () => { if (held) { held = false; return; } if (!AWAY) { tick(); openSettings(); } });
+  n.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); n.click(); } });
 })();
 
 /* Buttons: tap, and hold volume to repeat. */
@@ -653,7 +685,7 @@ $("#vpn").addEventListener("click", async () => {
 
 function render(status) {
     tv = status;
-    $("#name").textContent = tv.name || "TV";
+    $("#nameText").textContent = tv.name || "TV";
     $("#power").classList.toggle("on", tv.screenOn);
     const playing = (tv.nowPlaying || []).find(p => p.state === "playing" && p.title);
     $("#state").textContent = !tv.screenOn ? "Standby" : playing ? "Playing " + playing.title : tv.online ? "On" : "On, no internet";
@@ -792,7 +824,6 @@ function renderAlarm() {
       act("Make a QR code", async () => { const x = await api("/api/alarm/mission/new-qr", {}); if (x.error) { toast(x.error, true); return; } toast("QR code made. Save or print it, then try a test scan."); loadAlarmSheet(); });
     }
     list.append(r);
-    if (!AWAY) list.append(awayRows());
   } else {
     const shown = new Set(alarmData.upcoming.map(u => u.date));
     const later = [...new Set([...Object.keys(alarmData.dates), ...extraDates])].filter(d => !shown.has(d) && d > alarmData.upcoming[0].date).sort().map(dayInfo);
@@ -814,20 +845,51 @@ function renderAlarm() {
     list.append(pick);
   }
 }
-/* At home only: adding the TV to Apple's Home app (its setup code), and the alarm from anywhere (the HTTPS copy of this page, through the relay). */
+/*
+ * Settings (Jun, 2026-11-13: these had been rows at the bottom of the alarm sheet, where they did not belong): Apple Home (adding the TV, then where its remote is), the alarm from anywhere (the HTTPS copy of this page, through the relay), and the apps on this screen. At home only.
+ */
 let awayInfo = null;
-function awayRows() {
-  const box = document.createElement("div"); box.className = "row mission";
-  const h = awayInfo && awayInfo.homekit, rel = awayInfo && awayInfo.relay;
-  box.innerHTML = '<span class="what"><b>Apple Home</b><small id="hkNote"></small></span><span class="what"><b>From anywhere</b><small id="relNote"></small></span><span class="acts"></span>';
-  box.querySelector("#hkNote").textContent = !h ? "Checking" : h.paired ? "Added to the Home app: the TV works from Control Center's remote and away from home" : "In the Home app: +, Add Accessory, More options, Bedroom TV, then code " + h.code;
-  box.querySelector("#relNote").textContent = !rel ? "Checking" : "Change the alarm when you're out. " + (rel.connected ? "The TV is connected to the relay." : "The TV is not connected to the relay right now.");
-  const b = document.createElement("button"); b.textContent = "Set up from anywhere";
-  b.addEventListener("click", () => { tick(); if (rel) window.open(rel.page + "#k=" + encodeURIComponent(token), "_blank"); });
-  box.querySelector(".acts").append(b);
-  if (!awayInfo) api("/api/away").then(r => { awayInfo = r; if (!$("#alarmSheet").hidden && alarmTab === "week") renderAlarm(); }).catch(() => {});
-  return box;
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function group(title, chip, chipOn) {
+  const g = document.createElement("div"); g.className = "group";
+  const h = document.createElement("h3"); h.append(title);
+  if (chip) { const c = document.createElement("span"); c.className = "chip" + (chipOn ? " on" : ""); c.textContent = chip; h.append(c); }
+  g.append(h);
+  return g;
 }
+function para(g, html, note) { const p = document.createElement("p"); if (note) p.className = "note"; p.innerHTML = html; g.append(p); }
+function renderSettings() {
+  const h = awayInfo && awayInfo.homekit, rel = awayInfo && awayInfo.relay;
+  const hk = group("Apple Home", h ? (h.paired ? "Added" : "Not added") : "", h && h.paired);
+  if (!h) para(hk, "Checking", true);
+  else if (h.paired) {
+    // No name here: the Home app renames the TV as it adds it (to "TV" in the Bedroom, 2026-11-13).
+    para(hk, "<b>Arrows and OK:</b> the Remote in Control Center, with this TV picked at its top.");
+    para(hk, "<b>Power and apps:</b> this TV's tile in the Home app, at home or away.");
+    para(hk, "No Remote in Control Center? Open Control Center, tap + at the top left, then Add a Control, and search for Remote.", true);
+  } else {
+    para(hk, "In the Home app, tap +, then Add Accessory, More options, and Bedroom TV.");
+    para(hk, `Setup code: <b>${esc(h.code || "")}</b>`);
+  }
+  const aw = group("Alarm from anywhere", rel ? (rel.connected ? "Ready" : "TV offline") : "", rel && rel.connected);
+  para(aw, "Check and change the alarm when you're not on the home Wi-Fi.");
+  const b = document.createElement("button"); b.className = "go"; b.textContent = "Set up in Safari"; b.disabled = !rel;
+  b.addEventListener("click", () => { tick(); if (rel) window.open(rel.page + "#k=" + encodeURIComponent(token), "_blank"); });
+  aw.append(b);
+  para(aw, "Then tap Share, and Add to Home Screen.", true);
+  const sc = group("Apps on this screen"), sw = document.createElement("input");
+  sw.type = "checkbox"; sw.setAttribute("switch", ""); sw.id = "appsSwitch"; sw.setAttribute("aria-label", "Apps on this screen"); sw.checked = document.body.dataset.apps === "on";
+  sw.addEventListener("change", () => { tick(); setApps(sw.checked ? "on" : "off"); });
+  sc.querySelector("h3").append(sw);
+  para(sc, "Each screen size keeps its own choice, so the Duo can show apps unfolded and hide them folded.", true);
+  $("#settingsList").replaceChildren(hk, aw, sc);
+}
+async function openSettings() {
+  renderSettings(); $("#settingsSheet").hidden = false;
+  try { awayInfo = await api("/api/away"); } catch (e) { return; }
+  if (!$("#settingsSheet").hidden) renderSettings();
+}
+$("#settingsDone").addEventListener("click", () => { tick(); $("#settingsSheet").hidden = true; });
 
 // Only the latest change's answer redraws the list: an earlier answer arriving late (a second away, through the relay) would put back a time just changed, and the next pick would send that old hour (seen in testing, 2026-11-12).
 let alarmSeq = 0;
