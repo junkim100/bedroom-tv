@@ -583,12 +583,12 @@ document.querySelectorAll("[data-k]").forEach(b => {
 });
 
 /*
- * Clickpad (Jun, 2026-11-07: swipe from the centre, with haptics): tap the centre for OK or an edge for an arrow, hold an edge to repeat. Swipe anywhere, the centre included: the first step comes after 22 px, then one per 40 px, and a quick flick (14 px in under a quarter second) is one step. After a swipe, keeping the finger down keeps going that way, like the Siri Remote.
+ * Clickpad (Jun, 2026-11-07: swipe from the centre, with haptics): tap the centre for OK or an edge for an arrow, hold an edge to repeat. Holding the centre is a held OK (2026-11-16): on the TV's home screen it picks up the app in focus, and swiping with the finger still down moves it, as on Apple TV. Swipe anywhere, the centre included: the first step comes after 22 px, then one per 40 px, and a quick flick (14 px in under a quarter second) is one step. After a swipe, keeping the finger down keeps going that way, like the Siri Remote.
  */
 (() => {
   const pad = $("#pad"), FIRST = 22, NEXT = 40, FLICK_PX = 14, FLICK_MS = 250;
   let start = null, origin = null, t0 = 0, steps = 0, holdTimer, holdLoop, idleTimer;
-  const flash = dir => { const el = dir === "ok" ? $("#ok") : $(".chev." + dir[0]); if (!el) return; el.classList.add("hit"); setTimeout(() => el.classList.remove("hit"), 160); };
+  const flash = dir => { const el = dir.startsWith("ok") ? $("#ok") : $(".chev." + dir[0]); if (!el) return; el.classList.add("hit"); setTimeout(() => el.classList.remove("hit"), 160); };
   const send = (dir, haptic) => { flash(dir); key(dir, haptic); };
   const dirOf = (dx, dy) => Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
   const stop = () => { clearTimeout(holdTimer); clearTimeout(idleTimer); clearInterval(holdLoop); holdLoop = null; };
@@ -609,6 +609,7 @@ document.querySelectorAll("[data-k]").forEach(b => {
     start = origin = { x: e.clientX, y: e.clientY }; t0 = performance.now(); steps = 0; ripple(e.clientX, e.clientY);
     const z = zone(e.clientX, e.clientY);
     if (z !== "ok") holdTimer = setTimeout(() => { steps++; send(z, true); holdLoop = setInterval(() => send(z, true), 130); }, 450);
+    else holdTimer = setTimeout(() => { steps++; send("ok_long", true); }, 600);
   });
   pad.addEventListener("pointermove", e => {
     if (!start) return;
@@ -747,6 +748,7 @@ if (AWAY) $("#awayAlarm").addEventListener("click", () => $("#alarmBtn").click()
 const GLYPHS = {
   settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>',
   hdmi: '<svg viewBox="0 0 24 24"><path d="M3 8h18v5l-3 3H6l-3-3z"/><path d="M8 11h8"/></svg>',
+  lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
 };
 async function loadApps() {
   if (AWAY) return;
