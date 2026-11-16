@@ -152,6 +152,7 @@
   .row .what small.changed { color: var(--signal); }
   .row.off .when { opacity: .35; }
   .when { display: flex; align-items: center; gap: 2px; }
+  .when select.half { margin-left: 4px; }
   .when select { height: 36px; padding: 0 6px; font: inherit; font-size: 17px; font-weight: 600; color: var(--ink); background: var(--pressed); border: 0; border-radius: 9px; -webkit-appearance: none; appearance: none; text-align: center; }
   .row .usual { height: 30px; padding: 0 10px; font-size: 12px; color: var(--signal); background: transparent; }
   .row input[type=checkbox], .group input[type=checkbox] { flex: none; width: 44px; height: 26px; margin: 0; accent-color: var(--on); }
@@ -293,7 +294,7 @@
 </section>
 
 <section id="wake" hidden aria-label="Alarm">
-  <div class="face"><div id="wakeClock">7:00</div><div id="wakeBy">Up by 7:20</div><div id="wakeState"></div><div id="wakeDone">Alarm off. Good morning</div></div>
+  <div class="face"><div id="wakeClock">7:00</div><div id="wakeBy">Up by 7:20 AM</div><div id="wakeState"></div><div id="wakeDone">Alarm off. Good morning</div></div>
   <div class="actions">
     <div class="wakeButtons" id="wakeButtons">
       <button id="ringStop">Stop this ring</button>
@@ -765,10 +766,11 @@ async function loadApps() {
   } catch (e) {}
 }
 
-/* Alarm settings. Times are when Jun has to be up by, in 5-minute steps. */
+/* Alarm settings. Times are when Jun has to be up by, in 5-minute steps, shown in 12-hour form (Jun, 2026-11-17: "i dont like military time"); the TV keeps them as 24-hour "07:20". */
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
 const short = d => d[0] + d.slice(1, 3).toLowerCase();
-const show = t => t ? t.replace(/^0/, "") : "Off";
+const dial = h => (h + 11) % 12 + 1;
+const show = t => { if (!t) return "Off"; const [h, m] = t.split(":").map(Number); return dial(h) + ":" + String(m).padStart(2, "0") + (h < 12 ? " AM" : " PM"); };
 let alarmData = null, alarmTab = "week", extraDates = [];
 // A date beyond the next two weeks: its setting, worked out the same way the TV does (its own time, or its weekday's).
 function dayInfo(date) {
@@ -777,15 +779,18 @@ function dayInfo(date) {
   return { date, weekday: wd, time, changed, turnedOff: false };
 }
 function timePicker(time, onChange) {
-  const [h, m] = (time || "07:20").split(":");
+  const [h, m] = (time || "07:20").split(":").map(Number);
   const wrap = document.createElement("span"); wrap.className = "when";
-  const hs = document.createElement("select"), ms = document.createElement("select");
-  for (let i = 0; i < 24; i++) hs.add(new Option(String(i), String(i).padStart(2, "0"), false, +h === i));
-  for (let i = 0; i < 60; i += 5) ms.add(new Option(String(i).padStart(2, "0"), String(i).padStart(2, "0"), false, +m === i));
-  const fire = () => onChange(hs.value + ":" + ms.value);
-  hs.addEventListener("change", fire); ms.addEventListener("change", fire);
+  const hs = document.createElement("select"), ms = document.createElement("select"), ps = document.createElement("select");
+  // The hour on a 12-hour dial (12 is 0 past the half) and AM or PM, put back together as the TV's "HH:MM".
+  for (let i = 1; i <= 12; i++) hs.add(new Option(String(i), String(i % 12), false, h % 12 === i % 12));
+  for (let i = 0; i < 60; i += 5) ms.add(new Option(String(i).padStart(2, "0"), String(i).padStart(2, "0"), false, m === i));
+  ps.add(new Option("AM", "0", false, h < 12)); ps.add(new Option("PM", "12", false, h >= 12));
+  const fire = () => onChange(String(+hs.value + +ps.value).padStart(2, "0") + ":" + ms.value);
+  for (const sel of [hs, ms, ps]) sel.addEventListener("change", fire);
   const colon = document.createElement("span"); colon.textContent = ":";
-  wrap.append(hs, colon, ms);
+  ps.className = "half";
+  wrap.append(hs, colon, ms, ps);
   return wrap;
 }
 function row(title, note, noteChanged, on, time, onToggle, onTime, onUsual) {
@@ -973,7 +978,7 @@ $("#scanBack").addEventListener("click", () => { tick(); $("#scan").hidden = tru
   });
   $("#numpad").append(b);
 });
-setInterval(() => { const n = new Date(); $("#wakeClock").textContent = n.getHours() + ":" + String(n.getMinutes()).padStart(2, "0"); }, 1000);
+setInterval(() => { const n = new Date(); $("#wakeClock").textContent = dial(n.getHours()) + ":" + String(n.getMinutes()).padStart(2, "0"); }, 1000);
 
 /* Opening the remote turns the TV on when it is off (Jun, 2026-11-11), coming back to it from another app included. It only ever turns the TV on: opening and closing it never turn it off. The TV answers at once when its screen is already on. At night, if nothing is pressed, the TV goes back to standby after 2 minutes (SleepPolicy). */
 let wokeAt = 0;
