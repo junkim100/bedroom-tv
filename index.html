@@ -35,6 +35,12 @@
   /* Away from home (the HTTPS copy, through the relay): the TV's state, power and the alarm; the remote's keys are the Home app's job there. */
   body[data-away][data-layout] { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "top" "away"; }
   body[data-away] #padwrap, body[data-away] #nav, body[data-away] #keys, body[data-away] #type, body[data-away] #apps, body[data-away] #vpn { display: none; }
+  /* At home it opens as the alarm app (Jun, 2026-11-16: "just be the alarm app"): the same panel, with the remote's keys one tap away. */
+  body[data-mode="alarm"][data-layout] { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "top" "away"; }
+  body[data-mode="alarm"] #padwrap, body[data-mode="alarm"] #nav, body[data-mode="alarm"] #keys, body[data-mode="alarm"] #type, body[data-mode="alarm"] #apps { display: none; }
+  body:not([data-mode="alarm"]):not([data-away]) #awayPanel { display: none; }
+  #showRemote { height: 44px; padding: 0 22px; font-size: 15px; font-weight: 600; color: var(--ink); background: var(--key); }
+  body[data-away] #showRemote { display: none; }
   #awayPanel { grid-area: away; display: grid; align-content: center; justify-items: center; gap: 14px; text-align: center; }
   #awayPanel[hidden] { display: none; }
   #awayNext { margin: 0; font-size: clamp(40px, 12vw, 64px); font-weight: 600; letter-spacing: -0.02em; }
@@ -237,7 +243,7 @@
   @media (prefers-reduced-motion: reduce) { .ripple { animation: none; opacity: 0; } }
 </style>
 </head>
-<body data-layout="tall" data-apps="on">
+<body data-layout="tall" data-apps="on" data-mode="alarm">
 <header id="top">
   <button id="power" aria-label="Power"><svg viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg></button>
   <div id="who" role="button" tabindex="0" aria-label="Settings"><div id="name"><span id="nameText">TV</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div><div id="state">Connecting</div></div>
@@ -280,6 +286,7 @@
   <p id="awayNext">&nbsp;</p>
   <p id="awayWhen">Asking the TV</p>
   <button id="awayAlarm">Change the alarm</button>
+  <button id="showRemote">Remote</button>
   <p id="awayNote">You're using the TV from away. For the arrows, use Remote in Control Center. For apps, use the Home app.</p>
 </section>
 <section id="alarmSheet" class="sheet" hidden aria-label="Alarm">
@@ -694,6 +701,7 @@ function render(status) {
     const vpnOn = !!(tv.vpn && tv.vpn.on);
     $("#vpn").textContent = vpnOn ? "VPN on" : "VPN off"; $("#vpn").classList.toggle("on", vpnOn);
     alarmButton(tv.alarm); wakeMode(tv.alarm); keyboardPrompt(tv.keyboard, tv.search);
+    if (!AWAY && document.body.dataset.mode === "alarm" && !(alarmData && alarmData.status)) awayShow();
 }
 function renderError(e) { tv = null; $("#state").textContent = e.message === "unauthorized" ? "Not paired" : "Can't reach the TV"; $("#power").classList.remove("on"); }
 async function refresh() { try { render(await api("/api/status")); } catch (e) { renderError(e); } }
@@ -737,14 +745,24 @@ async function awayRefresh() {
   } catch (e) { renderError(e); $("#awayWhen").textContent = e.message === "unauthorized" ? "Not set up" : e.message; }
 }
 function awayShow() {
-  const next = alarmData && alarmData.status && alarmData.status.next;
+  const next = (alarmData && alarmData.status && alarmData.status.next) || (!AWAY && tv && tv.alarm && tv.alarm.next);
   if (!next) { $("#awayNext").textContent = "Off"; $("#awayWhen").textContent = "No alarm in the next two weeks"; return; }
   const d = new Date(next.date + "T12:00:00"), today = new Date();
   const days = Math.round((new Date(d.toDateString()) - new Date(today.toDateString())) / 864e5);
   $("#awayNext").textContent = show(next.time);
   $("#awayWhen").textContent = "Next alarm: " + (days === 0 ? "today" : days === 1 ? "tomorrow" : d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }));
 }
-if (AWAY) $("#awayAlarm").addEventListener("click", () => $("#alarmBtn").click());
+$("#awayAlarm").addEventListener("click", () => $("#alarmBtn").click());
+/* At home: the alarm first; Remote shows the keys, the apps and typing, and turns the TV on as opening the remote used to. Coming back to the app after a minute away starts on the alarm again. */
+let hiddenAt = 0;
+function alarmMode() {
+  if (AWAY) return;
+  document.body.dataset.mode = "alarm";
+  $("#awayPanel").hidden = false;
+  $("#awayNote").textContent = "For the arrows and typing, use Remote in your iPhone's Control Center and pick Bedroom TV.";
+  awayShow();
+}
+$("#showRemote").addEventListener("click", () => { tick(); document.body.dataset.mode = "remote"; loadApps(); wakeOnOpen(); });
 
 const GLYPHS = {
   settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>',
@@ -906,7 +924,7 @@ async function changeAlarm(body) {
     const r = await api("/api/alarm", body);
     if (my !== alarmSeq) return;
     if (r.error) { toast(r.error, true); return; }
-    alarmData = r; renderAlarm(); alarmButton(r.status); if (AWAY) awayShow();
+    alarmData = r; renderAlarm(); alarmButton(r.status); awayShow();
   } catch (e) { toast("Can't reach the TV", true); }
 }
 function alarmButton(a) {
@@ -917,7 +935,7 @@ function alarmButton(a) {
   $("#alarmNext").textContent = (days <= 1 ? "" : short(DAYS[(d.getDay() + 6) % 7]) + " ") + show(next.time);
   $("#alarmBtn").classList.add("set");
 }
-async function loadAlarmSheet() { alarmData = await api("/api/alarm"); renderAlarm(); if (AWAY) awayShow(); }
+async function loadAlarmSheet() { alarmData = await api("/api/alarm"); renderAlarm(); awayShow(); }
 $("#alarmBtn").addEventListener("click", async () => {
   tick();
   try { alarmTab = "week"; await loadAlarmSheet(); $("#alarmSheet").hidden = false; } catch (e) { toast("Can't reach the TV", true); }
@@ -980,15 +998,19 @@ $("#scanBack").addEventListener("click", () => { tick(); $("#scan").hidden = tru
 });
 setInterval(() => { const n = new Date(); $("#wakeClock").textContent = dial(n.getHours()) + ":" + String(n.getMinutes()).padStart(2, "0"); }, 1000);
 
-/* Opening the remote turns the TV on when it is off (Jun, 2026-11-11), coming back to it from another app included. It only ever turns the TV on: opening and closing it never turn it off. The TV answers at once when its screen is already on. At night, if nothing is pressed, the TV goes back to standby after 2 minutes (SleepPolicy). */
+/* Opening the remote turns the TV on when it is off (Jun, 2026-11-11), coming back to it from another app included; since it opens as the alarm app (2026-11-17), that is when Remote is tapped, so checking the alarm leaves the TV off. It only ever turns the TV on: opening and closing it never turn it off. The TV answers at once when its screen is already on. At night, if nothing is pressed, the TV goes back to standby after 2 minutes (SleepPolicy). */
 let wokeAt = 0;
 function wakeOnOpen() {
-  if (AWAY || !token || document.hidden || Date.now() - wokeAt < 5000) return;
+  if (AWAY || !token || document.hidden || document.body.dataset.mode === "alarm" || Date.now() - wokeAt < 5000) return;
   wokeAt = Date.now();
   api("/api/wake", { opened: true }).then(r => { if (r && r.ok && !(tv && tv.screenOn)) setTimeout(refresh, 1500); }).catch(() => {});
 }
-follow(); loadApps(); wakeOnOpen();
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { version = 0; follow(); loadApps(); wakeOnOpen(); } });
+alarmMode(); follow(); loadApps(); wakeOnOpen();
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (hiddenAt && Date.now() - hiddenAt > 60000) alarmMode();
+  version = 0; follow(); loadApps(); wakeOnOpen();
+});
 addEventListener("pageshow", e => { if (e.persisted) wakeOnOpen(); });
 // No pinch or double-tap zoom: it is a remote, not a page.
 document.addEventListener("gesturestart", e => e.preventDefault());
