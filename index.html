@@ -915,7 +915,8 @@ function renderSettings() {
   sw.addEventListener("change", () => { tick(); setApps(sw.checked ? "on" : "off"); });
   sc.querySelector("h3").append(sw);
   para(sc, "Each screen size keeps its own choice, so the Duo can show apps unfolded and hide them folded.", true);
-  $("#settingsList").replaceChildren(hk, si, aw, sc);
+  // The shortcut comes from the TV itself, so only at home.
+  $("#settingsList").replaceChildren(...(AWAY ? [hk, aw, sc] : [hk, si, aw, sc]));
 }
 async function openSettings() {
   renderSettings(); $("#settingsSheet").hidden = false;
