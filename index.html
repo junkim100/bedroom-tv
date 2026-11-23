@@ -896,6 +896,14 @@ function renderSettings() {
     para(hk, "In the Home app, tap +, then Add Accessory, More options, and Bedroom TV.");
     para(hk, `Setup code: <b>${esc(h.code || "")}</b>`);
   }
+  // Siri (Jun, 2026-11-23): any app by its name through Home's switches, and searches through the "TV search" shortcut (scripts/siri-shortcut.sh puts it on the TV).
+  const si = group("Siri");
+  para(si, "<b>Open an app:</b> “Hey Siri, turn on Haystack”, or any app on the TV's home screen.");
+  para(si, "<b>Search:</b> “Hey Siri, TV search”, then say what and where, like “Harry Potter on Stremio” or “Tottenham on YouTube”.");
+  const sb = document.createElement("button"); sb.className = "go"; sb.textContent = "Add TV search to Siri";
+  sb.addEventListener("click", () => { tick(); window.open("/siri.shortcut?t=" + encodeURIComponent(token), "_blank"); });
+  si.append(sb);
+  para(si, "Safari asks to download it: tap Download, open it from the downloads (the arrow in the address bar), then tap Add Shortcut.", true);
   const aw = group("Alarm from anywhere", rel ? (rel.connected ? "Ready" : "TV offline") : "", rel && rel.connected);
   para(aw, "Check and change the alarm when you're not on the home Wi-Fi.");
   const b = document.createElement("button"); b.className = "go"; b.textContent = "Set up in Safari"; b.disabled = !rel;
@@ -907,7 +915,7 @@ function renderSettings() {
   sw.addEventListener("change", () => { tick(); setApps(sw.checked ? "on" : "off"); });
   sc.querySelector("h3").append(sw);
   para(sc, "Each screen size keeps its own choice, so the Duo can show apps unfolded and hide them folded.", true);
-  $("#settingsList").replaceChildren(hk, aw, sc);
+  $("#settingsList").replaceChildren(hk, si, aw, sc);
 }
 async function openSettings() {
   renderSettings(); $("#settingsSheet").hidden = false;
