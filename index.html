@@ -287,7 +287,7 @@
   <p id="awayWhen">Asking the TV</p>
   <button id="awayAlarm">Change the alarm</button>
   <button id="showRemote">Remote</button>
-  <p id="awayNote">You're using the TV from away. For the arrows, use Remote in Control Center. For apps, use the Home app.</p>
+  <p id="awayNote">You're using the TV from away. To turn it on or off or open an app, use the Home app.</p>
 </section>
 <section id="alarmSheet" class="sheet" hidden aria-label="Alarm">
   <header><h2>Wake up by</h2><button id="alarmDone">Done</button></header>
@@ -889,7 +889,7 @@ function renderSettings() {
   if (!h) para(hk, "Checking", true);
   else if (h.paired) {
     // No name here: the Home app renames the TV as it adds it (to "TV" in the Bedroom, 2026-11-13).
-    para(hk, "<b>Arrows and OK:</b> the Remote in Control Center, with this TV picked at its top.");
+    para(hk, "<b>Arrows, OK and typing:</b> the Remote in Control Center at home, with Bedroom TV picked at its top.");
     para(hk, "<b>Power and apps:</b> this TV's tile in the Home app, at home or away.");
     para(hk, "No Remote in Control Center? Open Control Center, tap + at the top left, then Add a Control, and search for Remote.", true);
   } else {
